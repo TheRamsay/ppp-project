@@ -27,7 +27,7 @@ endif()
 set(ALLOW_OPENMP ON CACHE BOOL "Allow OpenMP for multi-threading")
 
 # Enable unity build
-set(CMAKE_UNITY_BUILD ON)
+set(CMAKE_UNITY_BUILD OFF)
 
 # Find MPI package
 set(MPI_CXX_SKIP_MPICXX ON) # Do not use mpicxx wrapper
