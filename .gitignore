@@ -1,0 +1,43 @@
+# Build artefacts
+/build/
+/cmake-build-*/
+/CMakeFiles/
+/CMakeCache.txt
+/*.cmake
+
+# Compiled objects and libraries
+*.o
+*.obj
+*.lo
+*.la
+*.a
+*.so
+*.dylib
+*.dll
+*.lib
+
+# Executables and debug symbols
+*.exe
+*.out
+*.app
+*.pdb
+
+# Generated data / archives
+*.h5
+*.zip
+*.tar
+*.tar.gz
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.ruff_cache/
+
+# IDE/editor
+.vscode/
+.idea/
+*.code-workspace
+.DS_Store
+
