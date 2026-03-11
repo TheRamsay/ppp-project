@@ -1,6 +1,6 @@
 /**
  * @file    utils.hpp
- * 
+ *
  * @authors David Bayer <ibayer@fit.vutbr.cz>
  *
  * @brief   Course: PPP 2023/2024 - Project 1
@@ -19,10 +19,9 @@
 /**
  * @brief Structure for error information.
  */
-struct ErrorInfo
-{
-  float       maxError{};    ///< Maximum error value.
-  std::size_t maxErrorIdx{}; ///< Index of the maximum error value.
+struct ErrorInfo {
+    float maxError{};          ///< Maximum error value.
+    std::size_t maxErrorIdx{}; ///< Index of the maximum error value.
 };
 
 /**
@@ -30,7 +29,7 @@ struct ErrorInfo
  * @param array Pointer to the array.
  * @param edgeSize Size of the edge of the 2D array.
  */
-void printArray2d(const float* array, std::size_t edgeSize);
+void printArray2d(const float *array, std::size_t edgeSize);
 
 /**
  * @brief Save 2D array as an image.
@@ -39,9 +38,7 @@ void printArray2d(const float* array, std::size_t edgeSize);
  * @param edgeSize Size of the edge of the 2D array.
  * @param normRange Optional range of the normalization values in the array.
  */
-void saveAsImage(std::string_view                       fileName,
-                 const float*                           array,
-                 std::size_t                            edgeSize,
+void saveAsImage(std::string_view fileName, const float *array, std::size_t edgeSize,
                  std::optional<std::pair<float, float>> normRange = std::nullopt);
 
 /**
@@ -53,10 +50,8 @@ void saveAsImage(std::string_view                       fileName,
  * @param epsilon Maximum allowed deviation.
  * @return Pair of boolean value and error information.
  */
-std::pair<bool, ErrorInfo> verifyResults(const float* result,
-                                         const float* refResult,
-                                         std::size_t  gridPointCount,
-                                         float*       outAbsDiff,
-                                         float        epsilon = 0.001f);
+std::pair<bool, ErrorInfo> verifyResults(const float *result, const float *refResult,
+                                         std::size_t gridPointCount, float *outAbsDiff,
+                                         float epsilon = 0.001f);
 
 #endif /* UTILS_HPP */

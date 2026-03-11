@@ -1,6 +1,6 @@
 /**
  * @file    MaterialProperties.hpp
- * 
+ *
  * @authors Filip Vaverka <ivaverka@fit.vutbr.cz>
  *          Jiri Jaros <jarosjir@fit.vutbr.cz>
  *          Kristian Kadlubiak <ikadlubiak@fit.vutbr.cz>
@@ -26,8 +26,7 @@
  * @brief The MaterialProperties class represents the simulation domain and its
  *        contents.
  */
-class MaterialProperties
-{
+class MaterialProperties {
   public:
     /// @brief Default constructor
     MaterialProperties() = default;
@@ -36,14 +35,14 @@ class MaterialProperties
      * @brief Copy constructor
      * @param other
      */
-    explicit MaterialProperties(const MaterialProperties& other) = default;
+    explicit MaterialProperties(const MaterialProperties &other) = default;
 
     /**
      * @brief Move constructor
      * @param other
      */
-    explicit MaterialProperties(MaterialProperties&& other) = default;
-    
+    explicit MaterialProperties(MaterialProperties &&other) = default;
+
     /// @brief Destructor
     ~MaterialProperties() = default;
 
@@ -52,14 +51,14 @@ class MaterialProperties
      * @param other
      * @return reference to this
      */
-    MaterialProperties &operator=(const MaterialProperties& other) = default;
+    MaterialProperties &operator=(const MaterialProperties &other) = default;
 
     /**
      * @brief Move assignment operator
      * @param other
      * @return reference to this
      */
-    MaterialProperties &operator=(MaterialProperties&& other) = default;
+    MaterialProperties &operator=(MaterialProperties &&other) = default;
 
     /**
      * @brief load domain information from the input material file.
@@ -75,19 +74,19 @@ class MaterialProperties
      * @brief Getter for domain map.
      * @return Domain map.
      */
-    const std::vector<int, AlignedAllocator<int>>& getDomainMap() const;
+    const std::vector<int, AlignedAllocator<int>> &getDomainMap() const;
 
     /**
      * @brief Getter for domain parameters.
      * @return Domain parameters.
      */
-    const std::vector<float, AlignedAllocator<float>>& getDomainParameters() const;
+    const std::vector<float, AlignedAllocator<float>> &getDomainParameters() const;
 
     /**
      * @brief Getter for initial temperature distribution.
      * @return Initial temperature distribution.
      */
-    const std::vector<float, AlignedAllocator<float>>& getInitialTemperature() const;
+    const std::vector<float, AlignedAllocator<float>> &getInitialTemperature() const;
 
     /**
      * @brief Getter for the temperature of the cooler.
@@ -119,14 +118,15 @@ class MaterialProperties
      * @brief Domain Map - defines type of the material at every gridpoint
      *        0 - air, 1 - aluminium, 2 - copper.
      */
-    std::vector<int, AlignedAllocator<int>>     mDomainMap{};
-    std::vector<float, AlignedAllocator<float>> mDomainParams{};   ///< Thermal properties of the medium.
-    std::vector<float, AlignedAllocator<float>> mInitTemp{};       ///< Initial temperature distribution.
+    std::vector<int, AlignedAllocator<int>> mDomainMap{};
+    std::vector<float, AlignedAllocator<float>>
+        mDomainParams{};                                     ///< Thermal properties of the medium.
+    std::vector<float, AlignedAllocator<float>> mInitTemp{}; ///< Initial temperature distribution.
 
-    float                                       mCoolerTemp{};     ///< Temperature of the air.
-    float                                       mHeaterTemp{};     ///< Temperature of the heater.
-    std::size_t                                 mEdgeSize{};       ///< Size of the domain.
-    std::size_t                                 mGridPointCount{}; ///< Total number of gridpoint in the domain.
+    float mCoolerTemp{};           ///< Temperature of the air.
+    float mHeaterTemp{};           ///< Temperature of the heater.
+    std::size_t mEdgeSize{};       ///< Size of the domain.
+    std::size_t mGridPointCount{}; ///< Total number of gridpoint in the domain.
 };
 
 #endif /* MATERIAL_PROPERTIES_HPP */

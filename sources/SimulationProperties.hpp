@@ -1,6 +1,6 @@
 /**
  * @file    SimulationProperties.hpp
- * 
+ *
  * @authors Filip Vaverka <ivaverka@fit.vutbr.cz>
  *          Jiri Jaros <jarosjir@fit.vutbr.cz>
  *          Kristian Kadlubiak <ikadlubiak@fit.vutbr.cz>
@@ -26,44 +26,41 @@
  * @brief The SimulationProperties class represents parameters of the simulation
  *        passed as application arguments.
  */
-class SimulationProperties
-{
+class SimulationProperties {
   public:
     /**
      * @brief Execution of the simulation
      */
-    enum class Execution
-    {
-      seq     = 0, /// @brief Run sequential code only.
-      par_p2p = 1, /// @brief Run parallel solver using poit-to-point.
-      par_rma = 2, /// @brief Run parallel solver using RMA.
+    enum class Execution {
+        seq = 0,     /// @brief Run sequential code only.
+        par_p2p = 1, /// @brief Run parallel solver using poit-to-point.
+        par_rma = 2, /// @brief Run parallel solver using RMA.
     };
 
     /**
      * @brief Type of the decomposition in MPI code
      */
-    enum class Decomposition
-    {
-      d1 = 0, /// @brief Run in 1D decomposition (= Nx1).
-      d2 = 1, /// @brief Run in 2D decomposition (~ N^(1/2) x N^(1/2)).
+    enum class Decomposition {
+        d1 = 0, /// @brief Run in 1D decomposition (= Nx1).
+        d2 = 1, /// @brief Run in 2D decomposition (~ N^(1/2) x N^(1/2)).
     };
 
     /**
      * @brief Constructor
      */
     SimulationProperties();
-    
+
     /**
      * @brief Copy constructor
      * @param other Object to be copied.
      */
-    explicit SimulationProperties(const SimulationProperties& other) = default;
+    explicit SimulationProperties(const SimulationProperties &other) = default;
 
     /**
      * @brief Move constructor
      * @param other Object to be moved.
      */
-    SimulationProperties(SimulationProperties&& other) = default;
+    SimulationProperties(SimulationProperties &&other) = default;
 
     /**
      * @brief Destructor
@@ -75,27 +72,27 @@ class SimulationProperties
      * @param other Object to be copied.
      * @return Returns reference to the current object.
      */
-    SimulationProperties& operator=(const SimulationProperties& other) = default;
+    SimulationProperties &operator=(const SimulationProperties &other) = default;
 
     /**
      * @brief Move assignment operator
      * @param other Object to be moved.
      * @return Returns reference to the current object.
      */
-    SimulationProperties& operator=(SimulationProperties&& other) = default;
+    SimulationProperties &operator=(SimulationProperties &&other) = default;
 
     /**
      * @brief Parse command line arguments passed to the application.
      * @param argc
      * @param argv
      */
-    void parseCommandLine(int argc, char* argv[]);
+    void parseCommandLine(int argc, char *argv[]);
 
     /**
      * @brief Print current simulation parameters.
      * @param materialProps Properties of the domain loaded from the input file.
      */
-    void printParameters(const MaterialProperties& materialProps) const;
+    void printParameters(const MaterialProperties &materialProps) const;
 
     /**
      * @brief Run sequential version?
@@ -201,7 +198,7 @@ class SimulationProperties
      * @brief Get decomposition grid
      * @return Returns number of subdivisions (tiles) in X and Y dimensions.
      */
-    void getDecompGrid(int& outSizeX, int& outSizeY) const;
+    void getDecompGrid(int &outSizeX, int &outSizeY) const;
 
     /**
      * @brief Append extension to the filename before its file type extension.
@@ -211,31 +208,30 @@ class SimulationProperties
      * @param fileTypeExt   File type extension.
      * @return Returns extended filename.
      */
-    static std::string appendFileNameExt(std::string_view fileName,
-                                         std::string_view fileNameExt,
+    static std::string appendFileNameExt(std::string_view fileName, std::string_view fileNameExt,
                                          std::string_view fileTypeExt);
 
   protected:
   private:
-    std::size_t           mNIterations;        ///< Number of iteration of the simulation.
-    int                   mThreadCount;        ///< Number of OMP threads per process.
-    std::size_t           mWriteIntensity;     ///< Every N-th iteration result is stored.
-    float                 mAirflowRate;        ///< Air flow rate of cooling air.
+    std::size_t mNIterations;    ///< Number of iteration of the simulation.
+    int mThreadCount;            ///< Number of OMP threads per process.
+    std::size_t mWriteIntensity; ///< Every N-th iteration result is stored.
+    float mAirflowRate;          ///< Air flow rate of cooling air.
 
-    std::string           mMaterialFileName;   ///< Path to input file.
-    std::string           mOutputFileName;     ///< Path to output file.
+    std::string mMaterialFileName; ///< Path to input file.
+    std::string mOutputFileName;   ///< Path to output file.
 
-    Execution             mExecution;          ///< Execution of the simulation.
-    bool                  mDebugFlag;          ///< Compare results of sequential and parallel codes.
-    bool                  mVerificationFlag;   ///< Verify the result.
-    [[maybe_unused]] bool mSequentialFlag;     ///< Unused.
-    bool                  mBatchMode;          ///< Output only in CSV format.
-    bool                  mBatchModeHeader;    ///< Output CSV header.
-    bool                  mUseParallelIO;      ///< Whether to use parallel HDF5 I/O.
-    Decomposition         mDecomposition;      ///< Decomposition of the simulation in parallel mode.
-    std::array<int, 2>    mGridSize;           ///< Number of tiles in each grid dimensions (N_x, N_y).
+    Execution mExecution;                  ///< Execution of the simulation.
+    bool mDebugFlag;                       ///< Compare results of sequential and parallel codes.
+    bool mVerificationFlag;                ///< Verify the result.
+    [[maybe_unused]] bool mSequentialFlag; ///< Unused.
+    bool mBatchMode;                       ///< Output only in CSV format.
+    bool mBatchModeHeader;                 ///< Output CSV header.
+    bool mUseParallelIO;                   ///< Whether to use parallel HDF5 I/O.
+    Decomposition mDecomposition;          ///< Decomposition of the simulation in parallel mode.
+    std::array<int, 2> mGridSize;          ///< Number of tiles in each grid dimensions (N_x, N_y).
 
-    std::string           mDebugImageName;     ///< Base filename of debug images.
+    std::string mDebugImageName; ///< Base filename of debug images.
 };
 
 #endif /* SIMULATION_PROPERTIES_HPP */

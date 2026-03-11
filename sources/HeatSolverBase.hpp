@@ -1,6 +1,6 @@
 /**
  * @file    HeatSolverBase.hpp
- * 
+ *
  * @authors Filip Vaverka <ivaverka@fit.vutbr.cz>
  *          Jiri Jaros <jarosjir@fit.vutbr.cz>
  *          Kristian Kadlubiak <ikadlubiak@fit.vutbr.cz>
@@ -32,17 +32,16 @@
  * @brief The HeatSolverBase class represents base class for implementation of
  * simple heat equation solver in heterogeneous medium.
  */
-class HeatSolverBase
-{
+class HeatSolverBase {
   public:
     /// @brief Default constructor is deleted
     HeatSolverBase() = delete;
-    
+
     /// @brief Copy constructor is deleted
-    HeatSolverBase(const HeatSolverBase&) = delete;
+    HeatSolverBase(const HeatSolverBase &) = delete;
 
     /// @brief Move constructor is deleted
-    HeatSolverBase(HeatSolverBase&&) = delete;
+    HeatSolverBase(HeatSolverBase &&) = delete;
 
     /**
      * @brief Destructor
@@ -50,10 +49,10 @@ class HeatSolverBase
     virtual ~HeatSolverBase() = default;
 
     /// @brief Copy assignment operator is deleted
-    HeatSolverBase& operator=(const HeatSolverBase&) = delete;
+    HeatSolverBase &operator=(const HeatSolverBase &) = delete;
 
     /// @brief Move assignment operator is deleted
-    HeatSolverBase& operator=(HeatSolverBase&&) = delete;
+    HeatSolverBase &operator=(HeatSolverBase &&) = delete;
 
     /**
      * @brief Pure-virtual method that needs to be implemented by each solver
@@ -65,7 +64,7 @@ class HeatSolverBase
      *                  MPI based implementation (where only ROOT - rank = 0 -
      *                  process gets needs this output array)!
      */
-    virtual void run(std::vector<float, AlignedAllocator<float>>& outResult) = 0;
+    virtual void run(std::vector<float, AlignedAllocator<float>> &outResult) = 0;
 
   protected:
     /**
@@ -75,7 +74,8 @@ class HeatSolverBase
      *        the next one.
      *
      * @param oldTemp     [IN]  Array representing the domain state computed in PREVIOUS sim. step.
-     * @param newTemp     [OUT] Array representing the domain in which computed point will be stored.
+     * @param newTemp     [OUT] Array representing the domain in which computed point will be
+     * stored.
      * @param params      Parameters of the material at each point of the (sub-)domain.
      * @param map         Material map where "0" values represent air.
      * @param i           Row (Y-axis) position of the evaluated point (as in i-th row).
@@ -84,22 +84,17 @@ class HeatSolverBase
      * @param airFlowRate Rate of heat dissipation due to air flow.
      * @param coolerTemp  Temperature of the cooler.
      */
-    static constexpr void computePoint(const float* oldTemp,
-                                       float*       newTemp,
-                                       const float* params,
-                                       const int*   map,
-                                       std::size_t  i,
-                                       std::size_t  j,
-                                       std::size_t  width,
-                                       float        airflowRate,
-                                       float        coolerTemp);
+    static constexpr void computePoint(const float *oldTemp, float *newTemp, const float *params,
+                                       const int *map, std::size_t i, std::size_t j,
+                                       std::size_t width, float airflowRate, float coolerTemp);
 
     /**
      * @brief Constructor
      * @param simulationProps Parameters of simulation read from command line arguments.
      * @param materialProps   Parameters of material read from the input file.
      */
-    HeatSolverBase(const SimulationProperties& simulationProps, const MaterialProperties& materialProps);
+    HeatSolverBase(const SimulationProperties &simulationProps,
+                   const MaterialProperties &materialProps);
 
     /**
      * @brief Returns type of the executed code (sequential or parallel).
@@ -135,7 +130,8 @@ class HeatSolverBase
      * @brief Print either human or machine (CSV) readable report of status of
      *        FINISHED simulation.
      *        NOTE: Should be called after last iteration of the simulation.
-     * @param totalTime        Total time elapsed since the simulation begun [s] (ie. MPI_Wtime(...))
+     * @param totalTime        Total time elapsed since the simulation begun [s] (ie.
+     * MPI_Wtime(...))
      * @param middleColAvgTemp Computed temperature average of the middle column in the domain.
      */
     void printFinalReport(double totalTime, float middleColAvgTemp) const;
@@ -149,11 +145,12 @@ class HeatSolverBase
      * @param iteration  Integer representing current iteration.
      * @param data       2D square array of "edgeSize"x"edgeSize" elements.
      */
-    void storeDataIntoFile(hid_t fileHandle, std::size_t iteration, const float* data);
+    void storeDataIntoFile(hid_t fileHandle, std::size_t iteration, const float *data);
 
     /**
      * @brief Evaluate heat-equation over specified tile
-     * @param oldTemp       [IN]  Array representing the domain state computed in PREVIOUS sim. step.
+     * @param oldTemp       [IN]  Array representing the domain state computed in PREVIOUS sim.
+     * step.
      * @param newTemp       [OUT] Array representing the updated domain.
      * @param params        Parameters of the material at each point of the (sub-)domain.
      * @param map           Material map where "0" values represent air.
@@ -165,65 +162,48 @@ class HeatSolverBase
      * @param airFlowRate   Rate of heat dissipation due to air flow.
      * @param coolerTemp    Temperature of the cooler.
      */
-    void updateTile(const float* oldTemp,
-                    float*       newTemp,
-                    const float* params,
-                    const int*   map,
-                    std::size_t  offsetX,
-                    std::size_t  offsetY,
-                    std::size_t  sizeX,
-                    std::size_t  sizeY,
-                    std::size_t  strideX) const;
+    void updateTile(const float *oldTemp, float *newTemp, const float *params, const int *map,
+                    std::size_t offsetX, std::size_t offsetY, std::size_t sizeX, std::size_t sizeY,
+                    std::size_t strideX) const;
 
-    const SimulationProperties& mSimulationProps; ///< Parameters of the simulation (from arguments)
-    const MaterialProperties&   mMaterialProps;   ///< Parameters of the material (from input file)
+    const SimulationProperties &mSimulationProps; ///< Parameters of the simulation (from arguments)
+    const MaterialProperties &mMaterialProps;     ///< Parameters of the material (from input file)
   private:
 };
 
-#pragma omp declare simd notinbranch \
-                         uniform(oldTemp, newTemp, params, map, width, airflowRate, coolerTemp) \
-                         linear(i, j)
-inline constexpr void HeatSolverBase::computePoint(const float* oldTemp,
-                                                   float*       newTemp,
-                                                   const float* params,
-                                                   const int*   map,
-                                                   std::size_t  i,
-                                                   std::size_t  j,
-                                                   std::size_t  width,
-                                                   float        airflowRate,
-                                                   float        coolerTemp)
-{
-  // 1. Precompute neighbor indices.
-  const unsigned center    = static_cast<unsigned>(i * width + j);
-  const unsigned top[2]    = { center - static_cast<unsigned>(width), center - 2 * static_cast<unsigned>(width) };
-  const unsigned bottom[2] = { center + static_cast<unsigned>(width), center + 2 * static_cast<unsigned>(width) };
-  const unsigned left[2]   = { center - 1, center - 2 };
-  const unsigned right[2]  = { center + 1, center + 2 };
+#pragma omp declare simd notinbranch uniform(oldTemp, newTemp, params, map, width, airflowRate,    \
+                                                 coolerTemp) linear(i, j)
+inline constexpr void HeatSolverBase::computePoint(const float *oldTemp, float *newTemp,
+                                                   const float *params, const int *map,
+                                                   std::size_t i, std::size_t j, std::size_t width,
+                                                   float airflowRate, float coolerTemp) {
+    // 1. Precompute neighbor indices.
+    const unsigned center = static_cast<unsigned>(i * width + j);
+    const unsigned top[2] = {center - static_cast<unsigned>(width),
+                             center - 2 * static_cast<unsigned>(width)};
+    const unsigned bottom[2] = {center + static_cast<unsigned>(width),
+                                center + 2 * static_cast<unsigned>(width)};
+    const unsigned left[2] = {center - 1, center - 2};
+    const unsigned right[2] = {center + 1, center + 2};
 
-  // 2. The reciprocal value of the sum of domain parameters for normalization.
-  const float frac = 1.0f / (params[top[0]]    + params[top[1]]    +
-                             params[bottom[0]] + params[bottom[1]] +
-                             params[left[0]]   + params[left[1]]   +
-                             params[right[0]]  + params[right[1]]  +
-                             params[center]);
+    // 2. The reciprocal value of the sum of domain parameters for normalization.
+    const float frac = 1.0f / (params[top[0]] + params[top[1]] + params[bottom[0]] +
+                               params[bottom[1]] + params[left[0]] + params[left[1]] +
+                               params[right[0]] + params[right[1]] + params[center]);
 
-  // 3. Compute new temperature at the specified grid point.
-  float pointTemp = oldTemp[top[0]]    * params[top[0]]    * frac +
-                    oldTemp[top[1]]    * params[top[1]]    * frac +
-                    oldTemp[bottom[0]] * params[bottom[0]] * frac +
-                    oldTemp[bottom[1]] * params[bottom[1]] * frac +
-                    oldTemp[left[0]]   * params[left[0]]   * frac +
-                    oldTemp[left[1]]   * params[left[1]]   * frac +
-                    oldTemp[right[0]]  * params[right[0]]  * frac +
-                    oldTemp[right[1]]  * params[right[1]]  * frac +
-                    oldTemp[center]    * params[center]    * frac;
+    // 3. Compute new temperature at the specified grid point.
+    float pointTemp =
+        oldTemp[top[0]] * params[top[0]] * frac + oldTemp[top[1]] * params[top[1]] * frac +
+        oldTemp[bottom[0]] * params[bottom[0]] * frac +
+        oldTemp[bottom[1]] * params[bottom[1]] * frac + oldTemp[left[0]] * params[left[0]] * frac +
+        oldTemp[left[1]] * params[left[1]] * frac + oldTemp[right[0]] * params[right[0]] * frac +
+        oldTemp[right[1]] * params[right[1]] * frac + oldTemp[center] * params[center] * frac;
 
-  // 4. Remove some of the heat due to air flow
-  pointTemp = (map[center] == 0)
-                ? (airflowRate * coolerTemp) + ((1.0f - airflowRate) * pointTemp)
-                : pointTemp;
+    // 4. Remove some of the heat due to air flow
+    pointTemp = (map[center] == 0) ? (airflowRate * coolerTemp) + ((1.0f - airflowRate) * pointTemp)
+                                   : pointTemp;
 
-  newTemp[center] = pointTemp;
+    newTemp[center] = pointTemp;
 }
 
 #endif /* HEAT_SOLVER_BASE_HPP */
