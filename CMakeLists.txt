@@ -14,6 +14,10 @@ cmake_minimum_required(VERSION 3.22)
 
 project(ppp_proj01 LANGUAGES C CXX)
 
+if(NOT DEFINED LOGIN)
+  set(LOGIN "xhumld00")
+endif()
+
 # Set default build type to Release
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
