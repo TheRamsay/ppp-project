@@ -1,0 +1,182 @@
+\documentclass{article}
+\usepackage{graphicx, xcolor}  % Pro obrázky
+\usepackage{subcaption} % Pro subfigure
+\usepackage{amsmath}   % Pro matematické vzorce
+\usepackage{hyperref}  % Pro odkazy
+\usepackage{listings}  % Pro kód
+\usepackage{caption}   % Popisky obrázků
+\usepackage{float}     % Umístění obrázků
+
+\title{Praktické paralelní programování\\Dokumentace k projektu č. 1\\MPI a paralelní I/O}
+\author{Jméno Příjmení (xlogin00)}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\section{Úvod}
+\label{sec:uvod}
+% Popis tématu a účelu projektu. Jaký problém řeší? Jaký je jeho přínos?
+
+\section{Popis implementace}
+\label{sec:implementace}
+% Klíčové body implementace
+Vyjádřete se k jednotlivým implementacím a zdůvodněte klíčová rozhodnutí. 
+
+\section{Škálování}
+\label{sec:skalovani}
+
+% 2D MPI
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \includegraphics[scale=0.5]{example-image}
+        \caption{Silné škálování: čisté MPI s 2D dekompozicí, výměna okrajů pomocí P2P.}
+        \label{fig:2D_MPI_P2P}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \includegraphics[scale=0.5]{example-image}
+        \caption{Silné škálování: čisté MPI s 2D dekompozicí, výměna okrajů pomocí RMA.}
+        \label{fig:2D_MPI_RMA}
+    \end{subfigure}
+
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \includegraphics[scale=0.5]{example-image}
+        \caption{Cena výpočtu: čisté MPI s 2D dekompozicí, výměna okrajů pomocí P2P.}
+        \label{fig:2D_MPI_P2P}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \includegraphics[scale=0.5]{example-image}
+        \caption{Cena výpočtu: čisté MPI s 2D dekompozicí, výměna okrajů pomocí RMA.}
+        \label{fig:2D_MPI_RMA}
+    \end{subfigure}
+    \caption{Silné škálování a cena výpočtu: čisté MPI s 2D dekompozicí.}
+    \label{fig:2D_MPI}
+\end{figure}
+
+% 2D MPI + OpenMP
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \includegraphics[scale=0.5]{example-image}
+        \caption{Silné škálování: hybridní MPI s 2D dekompozicí, výměna okrajů pomocí P2P.}
+        \label{fig:2D_MPI_P2P_hybrid}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \includegraphics[scale=0.5]{example-image}
+        \caption{Silné škálování: hybridní MPI s 2D dekompozicí, výměna okrajů pomocí RMA.}
+        \label{fig:2D_MPI_RMA_ hybrid}
+    \end{subfigure}
+
+     \begin{subfigure}{0.45\textwidth}
+        \centering
+        \includegraphics[scale=0.5]{example-image}
+        \caption{Cena výpočtu: hybridní MPI s 2D dekompozicí, výměna okrajů pomocí P2P.}
+        \label{fig:2D_MPI_P2P_hybrid}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \includegraphics[scale=0.5]{example-image}
+        \caption{Cena výpočtu: hybridní MPI s 2D dekompozicí, výměna okrajů pomocí RMA.}
+        \label{fig:2D_MPI_RMA_ hybrid}
+    \end{subfigure}
+    \caption{Silné škálování a cena výpočtu: hybridní MPI s 2D dekompozicí.}
+    \label{fig:2D_MPI_hybrid}
+\end{figure}
+
+% 1D MPI + OpenMP
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \includegraphics[scale=0.5]{example-image}
+        \caption{Silné škálování: hybridní MPI s 1D dekompozicí, výměna okrajů pomocí P2P.}
+        \label{fig:1D_MPI_P2P_hybrid}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \includegraphics[scale=0.5]{example-image}
+        \caption{Silné škálování: hybridní MPI s 1D dekompozicí, výměna okrajů pomocí RMA.}
+        \label{fig:1D_MPI_RMA_ hybrid}
+    \end{subfigure}
+
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \includegraphics[scale=0.5]{example-image}
+        \caption{Cena výpočtu: hybridní MPI s 1D dekompozicí, výměna okrajů pomocí P2P.}
+        \label{fig:1D_MPI_P2P_hybrid}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \includegraphics[scale=0.5]{example-image}
+        \caption{Cena výpočtu: hybridní MPI s 1D dekompozicí, výměna okrajů pomocí RMA.}
+        \label{fig:1D_MPI_RMA_ hybrid}
+    \end{subfigure}
+    \caption{Silné škálování a cena výpočtu: hybridní MPI s 1D dekompozicí.}
+    \label{fig:1D_MPI_hybrid}
+\end{figure}
+
+\section{Profilování}
+\label{sec:profilovani}
+
+\subsection{Vampir}
+\label{subsec:vampir}
+
+Zde případně vložte screenshoty z programu Vampir.
+
+\noindent
+Poznámky:
+\begin{itemize}
+    \item Interaktivní manuál: \url{https://vampir.eu/tutorial/manual}
+    \item Process Summary: \url{https://vampir.eu/tutorial/manual/performance_data_visualization#sec-processsummary} 
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[scale=0.5]{example-image}
+    \caption{Vampir: Popis obrázku.}
+    \label{fig:vampir} 
+\end{figure}
+
+\subsection{Cube}
+\label{subsec:cube}
+
+Zde případně vložte screenshoty z programu Cube.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[scale=0.5]{example-image}
+    \caption{Cube: Popis obrázku.}
+    \label{fig:cube} 
+\end{figure}
+
+\subsection{VisIt}
+\label{subsec:visit}
+
+Zde případně vložte screenshoty z programu VisIt.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[scale=0.5]{example-image}
+    \caption{VisIt: Popis obrázku.}
+    \label{fig:visit} 
+\end{figure}
+
+\section{Závěr}
+\label{sec:zaver}
+Souhrn výsledků.
+
+\end{document}
