@@ -107,7 +107,6 @@ void ParallelHeatSolver::deinitGridTopology() {
         MPI_Comm_free(&middleColComm);
         middleColComm = MPI_COMM_NULL;
     }
-
     if (cartComm != MPI_COMM_NULL) {
         MPI_Comm_free(&cartComm);
         cartComm = MPI_COMM_NULL;
@@ -119,6 +118,8 @@ void ParallelHeatSolver::initDataDistribution() {
     /*                 Initialize variables and MPI datatypes for data distribution (float and int).
      */
     /**********************************************************************************************************************/
+    // Local stored array dimensions
+    // Includes halo zones
     localTileX = this->transferTileX + this->haloZoneSize * 2;
     localTileY = this->transferTileY + this->haloZoneSize * 2;
 
@@ -256,8 +257,8 @@ template <typename T> void ParallelHeatSolver::scatterTiles(const T *globalData,
 
     /**********************************************************************************************************************/
     /*                      Implement master's global tile scatter to each rank's local tile. */
-    /*     The template T parameter is restricted to int or float type. You can choose the correct
-     * MPI datatype like:     */
+    /*     The template T parameter is restricted to int or float type. You can choose the
+     * correct MPI datatype like:     */
     /*                                                                                                                    */
     /*  const MPI_Datatype globalTileType = std::is_same_v<T, int> ? globalFloatTileType :
      * globalIntTileType;             */
@@ -272,12 +273,19 @@ template <typename T> void ParallelHeatSolver::scatterTiles(const T *globalData,
     // TODO: root 0?
     std::vector<int> sendCounts(mWorldSize);
     std::vector<int> displs(mWorldSize);
+    // coords = (tileY, tileX)
     int coords[2] = {};
 
     if (mWorldRank == 0) {
         for (int i = 0; i < mWorldSize; i++) {
             sendCounts[i] = 1;
             MPI_Cart_coords(cartComm, i, 2, coords);
+            // funny math here, basically take number of rows from that SMALL TILE, multiply it by
+            // its position in the global grid (process based), and then also multiply it by stride
+            // of the global grid (transferTileX)
+            // that will moves us to correct row in the global grid, and then we just adjust
+            // the column
+            // (pláčem 😭)
             displs[i] = (coords[1] * transferTileY) * globalTileX + coords[0] * transferTileX;
         }
     }
@@ -291,9 +299,10 @@ template <typename T> void ParallelHeatSolver::gatherTiles(const T *localData, T
                   "Unsupported gather datatype!");
 
     /**********************************************************************************************************************/
-    /*                      Implement each rank's local tile gather to master's rank global tile. */
-    /*     The template T parameter is restricted to int or float type. You can choose the correct
-     * MPI datatype like:     */
+    /*                      Implement each rank's local tile gather to master's rank global
+     * tile. */
+    /*     The template T parameter is restricted to int or float type. You can choose the
+     * correct MPI datatype like:     */
     /*                                                                                                                    */
     /*  const MPI_Datatype localTileType  = std::is_same_v<T, int> ? localIntTileType    :
      * localfloatTileType;            */
@@ -321,9 +330,10 @@ template <typename T> void ParallelHeatSolver::gatherTiles(const T *localData, T
 
 void ParallelHeatSolver::computeHaloZones(const float *oldTemp, float *newTemp) {
     /**********************************************************************************************************************/
-    /*  Compute new temperatures in halo zones, so that copy operations can be overlapped with inner
-     * region computation.  */
-    /*                        Use updateTile method to compute new temperatures in halo zones. */
+    /*  Compute new temperatures in halo zones, so that copy operations can be overlapped with
+     * inner region computation.  */
+    /*                        Use updateTile method to compute new temperatures in halo zones.
+     */
     /*                             TAKE CARE NOT TO COMPUTE THE SAME AREAS TWICE */
     /**********************************************************************************************************************/
 
@@ -345,8 +355,10 @@ void ParallelHeatSolver::computeHaloZones(const float *oldTemp, float *newTemp) 
 void ParallelHeatSolver::startHaloExchangeP2P(float *localData,
                                               std::array<MPI_Request, 8> &requests) {
     /**********************************************************************************************************************/
-    /*                       Start the non-blocking halo zones exchange using P2P communication. */
-    /*                         Use the requests array to return the requests from the function. */
+    /*                       Start the non-blocking halo zones exchange using P2P communication.
+     */
+    /*                         Use the requests array to return the requests from the function.
+     */
     /*                            Don't forget to set the empty requests to MPI_REQUEST_NULL. */
     /**********************************************************************************************************************/
     requests.fill(MPI_REQUEST_NULL);
@@ -391,7 +403,8 @@ void ParallelHeatSolver::startHaloExchangeP2P(float *localData,
 
 void ParallelHeatSolver::startHaloExchangeRMA(float *localData, MPI_Win window) {
     /**********************************************************************************************************************/
-    /*                       Start the non-blocking halo zones exchange using RMA communication. */
+    /*                       Start the non-blocking halo zones exchange using RMA communication.
+     */
     /*                   Do not forget that you put/get the values to/from the target's opposite
      * side                     */
     /**********************************************************************************************************************/
@@ -435,7 +448,8 @@ void ParallelHeatSolver::startHaloExchangeRMA(float *localData, MPI_Win window) 
 
 void ParallelHeatSolver::awaitHaloExchangeP2P(std::array<MPI_Request, 8> &requests) {
     /**********************************************************************************************************************/
-    /*                       Wait for all halo zone exchanges to finalize using P2P communication.
+    /*                       Wait for all halo zone exchanges to finalize using P2P
+     * communication.
      */
     /**********************************************************************************************************************/
 
@@ -445,7 +459,8 @@ void ParallelHeatSolver::awaitHaloExchangeP2P(std::array<MPI_Request, 8> &reques
 
 void ParallelHeatSolver::awaitHaloExchangeRMA(MPI_Win window) {
     /**********************************************************************************************************************/
-    /*                       Wait for all halo zone exchanges to finalize using RMA communication.
+    /*                       Wait for all halo zone exchanges to finalize using RMA
+     * communication.
      */
     /**********************************************************************************************************************/
     MPI_Win_fence(0, window);
@@ -568,8 +583,8 @@ void ParallelHeatSolver::run(std::vector<float, AlignedAllocator<float>> &outRes
     const double elapsedTime = MPI_Wtime() - startTime;
 
     /**********************************************************************************************************************/
-    /*           Compute (sequentially) and report final middle column temperature average and print
-     * final report.        */
+    /*           Compute (sequentially) and report final middle column temperature average and
+     * print final report.        */
     /**********************************************************************************************************************/
 
     if (mWorldRank == 0) {
@@ -648,8 +663,8 @@ void ParallelHeatSolver::openOutputFileParallel() {
 
     /**********************************************************************************************************************/
     /*                          Open output HDF5 file for parallel access with alignment. */
-    /*      Set up faplHandle to use MPI-IO and alignment. The handle will automatically release the
-     * resource.            */
+    /*      Set up faplHandle to use MPI-IO and alignment. The handle will automatically release
+     * the resource.            */
     /**********************************************************************************************************************/
 
     H5Pset_fapl_mpio(faplHandle, MPI_COMM_WORLD, MPI_INFO_NULL);
@@ -686,7 +701,8 @@ void ParallelHeatSolver::storeDataIntoFileParallel(hid_t fileHandle,
     {
         /**********************************************************************************************************************/
         /*                                Compute the tile offsets and sizes. */
-        /*               Note that the X and Y coordinates are swapped (but data not altered). */
+        /*               Note that the X and Y coordinates are swapped (but data not altered).
+         */
         /**********************************************************************************************************************/
 
         const std::array<hsize_t, 2> tileOffset{static_cast<hsize_t>(mCoords[1] * transferTileY),
@@ -701,8 +717,8 @@ void ParallelHeatSolver::storeDataIntoFileParallel(hid_t fileHandle,
 
         /**********************************************************************************************************************/
         /*                            Create dataset property list to set up chunking. */
-        /*                Set up chunking for collective write operation in datasetPropListHandle
-         * variable.                   */
+        /*                Set up chunking for collective write operation in
+         * datasetPropListHandle variable.                   */
         /**********************************************************************************************************************/
 
         H5Pset_chunk(datasetPropListHandle, 2, tileSize.data());
@@ -724,8 +740,8 @@ void ParallelHeatSolver::storeDataIntoFileParallel(hid_t fileHandle,
         /**********************************************************************************************************************/
 
         /**********************************************************************************************************************/
-        /*              Select inner part of the tile in memory and matching part of the dataset in
-         * the file                  */
+        /*              Select inner part of the tile in memory and matching part of the dataset
+         * in the file                  */
         /*                           (given by position of the tile in global domain). */
         /**********************************************************************************************************************/
 
