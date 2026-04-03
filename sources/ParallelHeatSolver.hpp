@@ -233,6 +233,42 @@ class ParallelHeatSolver : public HeatSolverBase {
 
     /// @brief Output file handle (parallel or sequential).
     Hdf5FileHandle mFileHandle{};
+
+    /// @brief Cartesian communicator for domain decomposition, either shape (P, 1) for 1D, or
+    /// (sqrt(P), sqrt(P)) for rectangle 2D, and (sqrt(P / 2), (2 * nX)) for non rectangle
+    MPI_Comm cartComm;
+    MPI_Comm middleColComm;
+
+    /// @brief Represents local tile (tileX, tileY) for gather/scatter from root node
+    MPI_Datatype transferTileInt;
+    MPI_Datatype transferTileFloat;
+    MPI_Datatype haloZoneVertical;
+    MPI_Datatype haloZoneHorizontal;
+
+    /// @brief Dimensions of transfer tile
+    size_t transferTileX, transferTileY;
+
+    /// @brief Dimensions of local tile
+    size_t localTileX, localTileY;
+
+    /// @brief Dimensions of global grid
+    size_t globalTileX, globalTileY;
+
+    size_t processTileX, processTileY;
+
+    /// @brief Grid of local material types (iron, air, etc.) size is gonna be (tileX +
+    /// haloZoneSize, tileY + haloZoneSize)
+    std::vector<int> materialTypesLocal;
+
+    /// @brief Grid of local material propertier (conductivity coefficient?), size is gonna be
+    /// (tileX + haloZoneSize, tileY + haloZoneSize)
+    std::vector<float> materialPropertiesLocal;
+
+    /// @brief History of local temperatures, for this use case its gonna be dimensions (2,
+    /// tileX + haloZoneSize, tileY + haloZoneSize)
+    std::vector<std::vector<float>> temperatureBufferLocal;
+
+    MPI_Win window;
 };
 
 #endif /* PARALLEL_HEAT_SOLVER_HPP */
