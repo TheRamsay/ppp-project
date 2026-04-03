@@ -47,6 +47,11 @@ ParallelHeatSolver::ParallelHeatSolver(const SimulationProperties &simulationPro
         /*                         only on MASTER rank using sequetial IO. Use openOutputFile*
          * methods.                       */
         /**********************************************************************************************************************/
+        if (mSimulationProps.useParallelIO()) {
+            openOutputFileParallel();
+        } else if (mWorldRank == 0) {
+            openOutputFileSequential();
+        }
     }
 }
 
@@ -55,6 +60,10 @@ ParallelHeatSolver::~ParallelHeatSolver() {
     /*                                  Call deinit* and dealloc* methods in correct order */
     /*                                             (should be in reverse order) */
     /**********************************************************************************************************************/
+    deinitHaloExchange();
+    deallocLocalTiles();
+    deinitDataDistribution();
+    deinitGridTopology();
 }
 
 std::string_view ParallelHeatSolver::getCodeType() const { return codeType; }
@@ -80,12 +89,13 @@ void ParallelHeatSolver::initGridTopology() {
 
     int periods[2] = {0, 0};
     int dims[2] = {nX, nY};
-    MPI_Cart_create(MPI_COMM_WORLD, 2, dims, periods, true, &this->cartComm);
+    MPI_Cart_create(MPI_COMM_WORLD, 2, dims, periods, false, &this->cartComm);
+    MPI_Comm_rank(cartComm, &mCartRank);
+    MPI_Cart_coords(cartComm, mCartRank, 2, mCoords.data());
 
-    // TODO: haha
-    // int globalMid = nX / 2;
-    // int color = MPI_UNDEFINED;
-    // MPI_Comm_split(cartComm, color, mWorldRank, &middleColComm);
+    const int middleColumnTile = static_cast<int>((globalTileX / 2) / transferTileX);
+    const int color = (mCoords[0] == middleColumnTile) ? 0 : MPI_UNDEFINED;
+    MPI_Comm_split(cartComm, color, mWorldRank, &middleColComm);
 }
 
 void ParallelHeatSolver::deinitGridTopology() {
@@ -93,7 +103,15 @@ void ParallelHeatSolver::deinitGridTopology() {
     /*      Deinitialize 2D grid topology and the middle column average temperature computation
      * communicator              */
     /**********************************************************************************************************************/
-    MPI_Comm_free(&this->cartComm);
+    if (middleColComm != MPI_COMM_NULL) {
+        MPI_Comm_free(&middleColComm);
+        middleColComm = MPI_COMM_NULL;
+    }
+
+    if (cartComm != MPI_COMM_NULL) {
+        MPI_Comm_free(&cartComm);
+        cartComm = MPI_COMM_NULL;
+    }
 }
 
 void ParallelHeatSolver::initDataDistribution() {
@@ -104,27 +122,62 @@ void ParallelHeatSolver::initDataDistribution() {
     localTileX = this->transferTileX + this->haloZoneSize * 2;
     localTileY = this->transferTileY + this->haloZoneSize * 2;
 
-    int dims[2] = {(int)this->globalTileX, (int)this->globalTileY};
-    int tileDims[2] = {(int)transferTileX, (int)transferTileY};
-    int start[2] = {0, 0};
-    MPI_Datatype dumbTileInt;
-    MPI_Datatype dumbTileFloat;
-    MPI_Type_create_subarray(2, dims, tileDims, start, MPI_ORDER_C, MPI_INT, &dumbTileInt);
-    MPI_Type_create_subarray(2, dims, tileDims, start, MPI_ORDER_C, MPI_FLOAT, &dumbTileFloat);
+    int globalDims[2] = {static_cast<int>(globalTileY), static_cast<int>(globalTileX)};
+    int transferDims[2] = {static_cast<int>(transferTileY), static_cast<int>(transferTileX)};
+    int globalStart[2] = {0, 0};
+    int localDims[2] = {static_cast<int>(localTileY), static_cast<int>(localTileX)};
+    int localStart[2] = {static_cast<int>(haloZoneSize), static_cast<int>(haloZoneSize)};
 
-    MPI_Type_create_resized(dumbTileInt, 0, sizeof(int), &transferTileInt);
-    MPI_Type_create_resized(dumbTileFloat, 0, sizeof(float), &transferTileFloat);
+    MPI_Datatype globalTileIntRaw = MPI_DATATYPE_NULL;
+    MPI_Datatype globalTileFloatRaw = MPI_DATATYPE_NULL;
+    MPI_Datatype localTileIntRaw = MPI_DATATYPE_NULL;
+    MPI_Datatype localTileFloatRaw = MPI_DATATYPE_NULL;
 
-    MPI_Type_commit(&transferTileInt);
-    MPI_Type_commit(&transferTileFloat);
+    MPI_Type_create_subarray(2, globalDims, transferDims, globalStart, MPI_ORDER_C, MPI_INT,
+                             &globalTileIntRaw);
+    MPI_Type_create_subarray(2, globalDims, transferDims, globalStart, MPI_ORDER_C, MPI_FLOAT,
+                             &globalTileFloatRaw);
+    MPI_Type_create_subarray(2, localDims, transferDims, localStart, MPI_ORDER_C, MPI_INT,
+                             &localTileIntRaw);
+    MPI_Type_create_subarray(2, localDims, transferDims, localStart, MPI_ORDER_C, MPI_FLOAT,
+                             &localTileFloatRaw);
+
+    MPI_Type_create_resized(globalTileIntRaw, 0, sizeof(int), &globalTransferTileInt);
+    MPI_Type_create_resized(globalTileFloatRaw, 0, sizeof(float), &globalTransferTileFloat);
+    MPI_Type_create_resized(localTileIntRaw, 0, sizeof(int), &localTransferTileInt);
+    MPI_Type_create_resized(localTileFloatRaw, 0, sizeof(float), &localTransferTileFloat);
+
+    MPI_Type_commit(&globalTransferTileInt);
+    MPI_Type_commit(&globalTransferTileFloat);
+    MPI_Type_commit(&localTransferTileInt);
+    MPI_Type_commit(&localTransferTileFloat);
+
+    MPI_Type_free(&globalTileIntRaw);
+    MPI_Type_free(&globalTileFloatRaw);
+    MPI_Type_free(&localTileIntRaw);
+    MPI_Type_free(&localTileFloatRaw);
 }
 
 void ParallelHeatSolver::deinitDataDistribution() {
     /**********************************************************************************************************************/
     /*                       Deinitialize variables and MPI datatypes for data distribution. */
     /**********************************************************************************************************************/
-    MPI_Type_free(&transferTileInt);
-    MPI_Type_free(&transferTileFloat);
+    if (globalTransferTileInt != MPI_DATATYPE_NULL) {
+        MPI_Type_free(&globalTransferTileInt);
+        globalTransferTileInt = MPI_DATATYPE_NULL;
+    }
+    if (globalTransferTileFloat != MPI_DATATYPE_NULL) {
+        MPI_Type_free(&globalTransferTileFloat);
+        globalTransferTileFloat = MPI_DATATYPE_NULL;
+    }
+    if (localTransferTileInt != MPI_DATATYPE_NULL) {
+        MPI_Type_free(&localTransferTileInt);
+        localTransferTileInt = MPI_DATATYPE_NULL;
+    }
+    if (localTransferTileFloat != MPI_DATATYPE_NULL) {
+        MPI_Type_free(&localTransferTileFloat);
+        localTransferTileFloat = MPI_DATATYPE_NULL;
+    }
 }
 
 void ParallelHeatSolver::allocLocalTiles() {
@@ -137,16 +190,18 @@ void ParallelHeatSolver::allocLocalTiles() {
     int localTileSize = localTileX * localTileY;
     materialTypesLocal.resize(localTileSize);
     materialPropertiesLocal.resize(localTileSize);
-    temperatureBufferLocal.resize(2);
-    temperatureBufferLocal[0] = std::vector<float>(localTileSize);
-    temperatureBufferLocal[1] = std::vector<float>(localTileSize);
+    temperatureBufferLocal[0].resize(localTileSize);
+    temperatureBufferLocal[1].resize(localTileSize);
 }
 
 void ParallelHeatSolver::deallocLocalTiles() {
     /**********************************************************************************************************************/
     /*                                   Deallocate local tiles (may be empty). */
     /**********************************************************************************************************************/
-    // TODO: mlem
+    materialTypesLocal.clear();
+    materialPropertiesLocal.clear();
+    temperatureBufferLocal[0].clear();
+    temperatureBufferLocal[1].clear();
 }
 
 void ParallelHeatSolver::initHaloExchange() {
@@ -156,41 +211,43 @@ void ParallelHeatSolver::initHaloExchange() {
      * windows.                 */
     /**********************************************************************************************************************/
 
-    MPI_Datatype verticalHaloDumbFloat;
-    MPI_Datatype verticalHaloDumbInt;
-
-    //      localTileX
-    // |---------------------|
-    // |      tranfserTileX  |
-    // |      |---------|    |
-    // v      v        v     v
-    // xx xx hv hv hv hv xx xx
-    // xx xx hv hv hv hv xx xx
-    // hh hh ll ll ll ll hh hh
-    // hh hh ll ll ll ll hh hh
-    // hh hh ll ll ll ll hh hh
-    // hh hh ll ll ll ll hh hh
-    // xx xx hv hv hv hv xx xx
-    // xx xx hv hv hv hv xx xx
-    MPI_Type_vector(haloZoneSize, transferTileX, localTileX, MPI_FLOAT, &haloZoneHorizontal);
-    MPI_Type_vector(transferTileY, haloZoneSize, localTileX, MPI_FLOAT, &verticalHaloDumbFloat);
-
-    MPI_Type_create_resized(verticalHaloDumbFloat, 0, sizeof(float), &haloZoneVertical);
+    MPI_Type_vector(static_cast<int>(haloZoneSize), static_cast<int>(transferTileX),
+                    static_cast<int>(localTileX), MPI_FLOAT, &haloZoneHorizontal);
+    MPI_Type_vector(static_cast<int>(transferTileY), static_cast<int>(haloZoneSize),
+                    static_cast<int>(localTileX), MPI_FLOAT, &haloZoneVertical);
 
     MPI_Type_commit(&haloZoneVertical);
     MPI_Type_commit(&haloZoneHorizontal);
 
-    MPI_Aint windowSize = localTileY * localTileX * sizeof(float);
-    MPI_Win_create(temperatureBufferLocal[0].data(), windowSize, sizeof(float), MPI_INFO_NULL,
-                   cartComm, &window);
+    if (mSimulationProps.isRunParallelRMA()) {
+        const MPI_Aint windowSize = static_cast<MPI_Aint>(localTileY * localTileX * sizeof(float));
+        MPI_Win_create(temperatureBufferLocal[0].data(), windowSize, sizeof(float), MPI_INFO_NULL,
+                       cartComm, &windows[0]);
+        MPI_Win_create(temperatureBufferLocal[1].data(), windowSize, sizeof(float), MPI_INFO_NULL,
+                       cartComm, &windows[1]);
+    }
 }
 
 void ParallelHeatSolver::deinitHaloExchange() {
     /**********************************************************************************************************************/
     /*                            Deinitialize variables and MPI datatypes for halo exchange. */
     /**********************************************************************************************************************/
-    MPI_Type_free(&haloZoneHorizontal);
-    MPI_Type_free(&haloZoneVertical);
+    if (windows[0] != MPI_WIN_NULL) {
+        MPI_Win_free(&windows[0]);
+        windows[0] = MPI_WIN_NULL;
+    }
+    if (windows[1] != MPI_WIN_NULL) {
+        MPI_Win_free(&windows[1]);
+        windows[1] = MPI_WIN_NULL;
+    }
+    if (haloZoneHorizontal != MPI_DATATYPE_NULL) {
+        MPI_Type_free(&haloZoneHorizontal);
+        haloZoneHorizontal = MPI_DATATYPE_NULL;
+    }
+    if (haloZoneVertical != MPI_DATATYPE_NULL) {
+        MPI_Type_free(&haloZoneVertical);
+        haloZoneVertical = MPI_DATATYPE_NULL;
+    }
 }
 
 template <typename T> void ParallelHeatSolver::scatterTiles(const T *globalData, T *localData) {
@@ -207,7 +264,10 @@ template <typename T> void ParallelHeatSolver::scatterTiles(const T *globalData,
     /*  const MPI_Datatype localTileType  = std::is_same_v<T, int> ? localIntTileType    :
      * localfloatTileType;            */
     /**********************************************************************************************************************/
-    const MPI_Datatype tileType = std::is_same_v<T, int> ? transferTileInt : transferTileFloat;
+    const MPI_Datatype globalTileType =
+        std::is_same_v<T, int> ? globalTransferTileInt : globalTransferTileFloat;
+    const MPI_Datatype localTileType =
+        std::is_same_v<T, int> ? localTransferTileInt : localTransferTileFloat;
 
     // TODO: root 0?
     std::vector<int> sendCounts(mWorldSize);
@@ -222,9 +282,8 @@ template <typename T> void ParallelHeatSolver::scatterTiles(const T *globalData,
         }
     }
 
-    // sendCounts has to offseted by halo zones
-    MPI_Scatterv(globalData, sendCounts.data(), displs.data(), tileType,
-                 &localData[localTileX * haloZoneSize + haloZoneSize], 1, tileType, 0, cartComm);
+    MPI_Scatterv(globalData, sendCounts.data(), displs.data(), globalTileType, localData, 1,
+                 localTileType, 0, cartComm);
 }
 
 template <typename T> void ParallelHeatSolver::gatherTiles(const T *localData, T *globalData) {
@@ -241,7 +300,10 @@ template <typename T> void ParallelHeatSolver::gatherTiles(const T *localData, T
     /*  const MPI_Datatype globalTileType = std::is_same_v<T, int> ? globalFloatTileType :
      * globalIntTileType;             */
     /**********************************************************************************************************************/
-    const MPI_Datatype tileType = std::is_same_v<T, int> ? transferTileInt : transferTileFloat;
+    const MPI_Datatype globalTileType =
+        std::is_same_v<T, int> ? globalTransferTileInt : globalTransferTileFloat;
+    const MPI_Datatype localTileType =
+        std::is_same_v<T, int> ? localTransferTileInt : localTransferTileFloat;
 
     std::vector<int> recvCounts(mWorldSize);
     std::vector<int> displs(mWorldSize);
@@ -253,8 +315,8 @@ template <typename T> void ParallelHeatSolver::gatherTiles(const T *localData, T
         displs[i] = (coords[1] * transferTileY) * globalTileX + coords[0] * transferTileX;
     }
 
-    MPI_Gatherv(&localData[localTileX * haloZoneSize + haloZoneSize], 1, tileType, globalData,
-                recvCounts.data(), displs.data(), tileType, 0, cartComm);
+    MPI_Gatherv(localData, 1, localTileType, globalData, recvCounts.data(), displs.data(),
+                globalTileType, 0, cartComm);
 }
 
 void ParallelHeatSolver::computeHaloZones(const float *oldTemp, float *newTemp) {
@@ -269,16 +331,15 @@ void ParallelHeatSolver::computeHaloZones(const float *oldTemp, float *newTemp) 
                haloZoneSize, haloZoneSize, transferTileX, haloZoneSize, localTileX);
 
     updateTile(oldTemp, newTemp, materialPropertiesLocal.data(), materialTypesLocal.data(),
-               haloZoneSize, haloZoneSize * 2, haloZoneSize, transferTileY - haloZoneSize,
+               haloZoneSize, transferTileY, transferTileX, haloZoneSize, localTileX);
+
+    updateTile(oldTemp, newTemp, materialPropertiesLocal.data(), materialTypesLocal.data(),
+               haloZoneSize, 2 * haloZoneSize, haloZoneSize, transferTileY - 2 * haloZoneSize,
                localTileX);
 
     updateTile(oldTemp, newTemp, materialPropertiesLocal.data(), materialTypesLocal.data(),
-               localTileX - 2 * haloZoneSize, 2 * haloZoneSize, haloZoneSize,
-               transferTileX - haloZoneSize, localTileX);
-
-    updateTile(oldTemp, newTemp, materialPropertiesLocal.data(), materialTypesLocal.data(),
-               2 * haloZoneSize, localTileY - 2 * haloZoneSize, transferTileX - 2 * haloZoneSize,
-               haloZoneSize, localTileX);
+               transferTileX, 2 * haloZoneSize, haloZoneSize, transferTileY - 2 * haloZoneSize,
+               localTileX);
 }
 
 void ParallelHeatSolver::startHaloExchangeP2P(float *localData,
@@ -288,44 +349,43 @@ void ParallelHeatSolver::startHaloExchangeP2P(float *localData,
     /*                         Use the requests array to return the requests from the function. */
     /*                            Don't forget to set the empty requests to MPI_REQUEST_NULL. */
     /**********************************************************************************************************************/
-    int rankSrc;
+    requests.fill(MPI_REQUEST_NULL);
 
-    MPI_Request *requestsPtr = requests.data();
+    int leftRank = MPI_PROC_NULL;
+    int rightRank = MPI_PROC_NULL;
+    int upRank = MPI_PROC_NULL;
+    int downRank = MPI_PROC_NULL;
 
-    // 0 = right
-    // 1 = up
-    // 2 = left
-    // 3 = down
+    MPI_Cart_shift(cartComm, 0, 1, &leftRank, &rightRank);
+    MPI_Cart_shift(cartComm, 1, 1, &upRank, &downRank);
 
-    MPI_Datatype haloZoneTypes[] = {haloZoneVertical, haloZoneHorizontal, haloZoneVertical,
-                                    haloZoneHorizontal};
+    const std::size_t sendLeft = haloZoneSize * localTileX + haloZoneSize;
+    const std::size_t recvLeft = haloZoneSize * localTileX;
+    const std::size_t sendRight = haloZoneSize * localTileX + transferTileX;
+    const std::size_t recvRight = haloZoneSize * localTileX + transferTileX + haloZoneSize;
+    const std::size_t sendUp = haloZoneSize * localTileX + haloZoneSize;
+    const std::size_t recvUp = haloZoneSize;
+    const std::size_t sendDown = transferTileY * localTileX + haloZoneSize;
+    const std::size_t recvDown = (transferTileY + haloZoneSize) * localTileX + haloZoneSize;
 
-    size_t recvOffsets[] = {2 * localTileX + (localTileX - haloZoneSize), haloZoneSize,
-                            2 * localTileX, (localTileY - 2) * localTileX + haloZoneSize};
-    size_t sendOffsets[] = {2 * localTileX + transferTileX, 2 * localTileX + haloZoneSize,
-                            2 * localTileX + haloZoneSize,
-                            (transferTileY - 2 * haloZoneSize) * localTileX + haloZoneSize};
+    if (leftRank != MPI_PROC_NULL) {
+        MPI_Isend(localData + sendLeft, 1, haloZoneVertical, leftRank, 0, cartComm, &requests[0]);
+        MPI_Irecv(localData + recvLeft, 1, haloZoneVertical, leftRank, 0, cartComm, &requests[1]);
+    }
 
-    int dstRanks[4] = {};
+    if (rightRank != MPI_PROC_NULL) {
+        MPI_Isend(localData + sendRight, 1, haloZoneVertical, rightRank, 0, cartComm, &requests[2]);
+        MPI_Irecv(localData + recvRight, 1, haloZoneVertical, rightRank, 0, cartComm, &requests[3]);
+    }
 
-    MPI_Cart_shift(cartComm, 0, 1, &rankSrc, &dstRanks[0]);
-    MPI_Cart_shift(cartComm, 1, 1, &rankSrc, &dstRanks[1]);
-    MPI_Cart_shift(cartComm, 0, -1, &rankSrc, &dstRanks[2]);
-    MPI_Cart_shift(cartComm, 1, -1, &rankSrc, &dstRanks[3]);
+    if (upRank != MPI_PROC_NULL) {
+        MPI_Isend(localData + sendUp, 1, haloZoneHorizontal, upRank, 0, cartComm, &requests[4]);
+        MPI_Irecv(localData + recvUp, 1, haloZoneHorizontal, upRank, 0, cartComm, &requests[5]);
+    }
 
-    for (int i = 0; i < 4; i++) {
-        auto haloZoneType = haloZoneTypes[i];
-        auto recvOffset = recvOffsets[i];
-        auto sendOffset = sendOffsets[i];
-        auto dstRank = dstRanks[i];
-
-        if (dstRank == MPI_PROC_NULL) {
-            *(requestsPtr++) = MPI_REQUEST_NULL;
-            *(requestsPtr++) = MPI_REQUEST_NULL;
-        } else {
-            MPI_Isend(localData + sendOffset, 1, haloZoneType, dstRank, 0, cartComm, requestsPtr++);
-            MPI_Irecv(localData + recvOffset, 1, haloZoneType, dstRank, 0, cartComm, requestsPtr++);
-        }
+    if (downRank != MPI_PROC_NULL) {
+        MPI_Isend(localData + sendDown, 1, haloZoneHorizontal, downRank, 0, cartComm, &requests[6]);
+        MPI_Irecv(localData + recvDown, 1, haloZoneHorizontal, downRank, 0, cartComm, &requests[7]);
     }
 }
 
@@ -336,28 +396,40 @@ void ParallelHeatSolver::startHaloExchangeRMA(float *localData, MPI_Win window) 
      * side                     */
     /**********************************************************************************************************************/
     MPI_Win_fence(0, window);
-    MPI_Datatype haloZoneTypes[] = {haloZoneVertical, haloZoneHorizontal, haloZoneVertical,
-                                    haloZoneHorizontal};
-    int rankSrc;
 
-    size_t recvOffsets[] = {2 * localTileX + (localTileX - haloZoneSize), haloZoneSize,
-                            2 * localTileX, (localTileY - 2) * localTileX + haloZoneSize};
-    size_t sendOffsets[] = {2 * localTileX + transferTileX, 2 * localTileX + haloZoneSize,
-                            2 * localTileX + haloZoneSize,
-                            (transferTileY - 2 * haloZoneSize) * localTileX + haloZoneSize};
+    int leftRank = MPI_PROC_NULL;
+    int rightRank = MPI_PROC_NULL;
+    int upRank = MPI_PROC_NULL;
+    int downRank = MPI_PROC_NULL;
 
-    int dstRanks[4] = {};
+    MPI_Cart_shift(cartComm, 0, 1, &leftRank, &rightRank);
+    MPI_Cart_shift(cartComm, 1, 1, &upRank, &downRank);
 
-    MPI_Cart_shift(cartComm, 0, 1, &rankSrc, &dstRanks[0]);
-    MPI_Cart_shift(cartComm, 1, 1, &rankSrc, &dstRanks[1]);
-    MPI_Cart_shift(cartComm, 0, -1, &rankSrc, &dstRanks[2]);
-    MPI_Cart_shift(cartComm, 1, -1, &rankSrc, &dstRanks[3]);
+    const std::size_t leftInterior = haloZoneSize * localTileX + haloZoneSize;
+    const std::size_t rightInterior = haloZoneSize * localTileX + transferTileX;
+    const std::size_t topInterior = haloZoneSize * localTileX + haloZoneSize;
+    const std::size_t bottomInterior = transferTileY * localTileX + haloZoneSize;
 
-    for (int i = 0; i < 4; i++) {
-        if (dstRanks[i] != MPI_PROC_NULL) {
-            MPI_Put(localData + sendOffsets[i], 1, haloZoneTypes[i], dstRanks[i], recvOffsets[i], 1,
-                    haloZoneTypes[i], window);
-        }
+    const std::size_t leftHalo = haloZoneSize * localTileX;
+    const std::size_t rightHalo = haloZoneSize * localTileX + transferTileX + haloZoneSize;
+    const std::size_t topHalo = haloZoneSize;
+    const std::size_t bottomHalo = (transferTileY + haloZoneSize) * localTileX + haloZoneSize;
+
+    if (leftRank != MPI_PROC_NULL) {
+        MPI_Get(localData + leftHalo, 1, haloZoneVertical, leftRank, rightInterior, 1,
+                haloZoneVertical, window);
+    }
+    if (rightRank != MPI_PROC_NULL) {
+        MPI_Get(localData + rightHalo, 1, haloZoneVertical, rightRank, leftInterior, 1,
+                haloZoneVertical, window);
+    }
+    if (upRank != MPI_PROC_NULL) {
+        MPI_Get(localData + topHalo, 1, haloZoneHorizontal, upRank, bottomInterior, 1,
+                haloZoneHorizontal, window);
+    }
+    if (downRank != MPI_PROC_NULL) {
+        MPI_Get(localData + bottomHalo, 1, haloZoneHorizontal, downRank, topInterior, 1,
+                haloZoneHorizontal, window);
     }
 }
 
@@ -381,6 +453,20 @@ void ParallelHeatSolver::awaitHaloExchangeRMA(MPI_Win window) {
 
 void ParallelHeatSolver::run(std::vector<float, AlignedAllocator<float>> &outResult) {
     std::array<MPI_Request, 8> requestsP2P{};
+    std::vector<float, AlignedAllocator<float>> gatheredData;
+    const std::size_t computeOffsetX = haloZoneSize + (mCoords[0] == 0 ? haloZoneSize : 0);
+    const std::size_t computeOffsetY = haloZoneSize + (mCoords[1] == 0 ? haloZoneSize : 0);
+    const std::size_t computeSizeX =
+        transferTileX - (mCoords[0] == 0 ? haloZoneSize : 0) -
+        (mCoords[0] == static_cast<int>(processTileX) - 1 ? haloZoneSize : 0);
+    const std::size_t computeSizeY =
+        transferTileY - (mCoords[1] == 0 ? haloZoneSize : 0) -
+        (mCoords[1] == static_cast<int>(processTileY) - 1 ? haloZoneSize : 0);
+
+    if (mWorldRank == 0 && !mSimulationProps.useParallelIO() &&
+        !mSimulationProps.getOutputFileName().empty()) {
+        gatheredData.resize(mMaterialProps.getGridPointCount());
+    }
 
     /**********************************************************************************************************************/
     /*                                         Scatter initial data. */
@@ -409,6 +495,9 @@ void ParallelHeatSolver::run(std::vector<float, AlignedAllocator<float>> &outRes
     std::copy(temperatureBufferLocal[0].begin(), temperatureBufferLocal[0].end(),
               temperatureBufferLocal[1].begin());
 
+    float middleColAvgTemp = 0.0f;
+    const double startTime = MPI_Wtime();
+
     // 3. Start main iterative simulation loop.
     for (std::size_t iter = 0; iter < mSimulationProps.getNumIterations(); ++iter) {
         const std::size_t oldIdx = iter % 2;       // Index of the buffer with old temperatures
@@ -417,31 +506,29 @@ void ParallelHeatSolver::run(std::vector<float, AlignedAllocator<float>> &outRes
         /**********************************************************************************************************************/
         /*                            Compute and exchange halo zones using P2P or RMA. */
         /**********************************************************************************************************************/
-        computeHaloZones(temperatureBufferLocal[oldIdx].data(),
-                         temperatureBufferLocal[newIdx].data());
+        if (computeSizeX > 0 && computeSizeY > 0) {
+            updateTile(temperatureBufferLocal[oldIdx].data(), temperatureBufferLocal[newIdx].data(),
+                       materialPropertiesLocal.data(), materialTypesLocal.data(), computeOffsetX,
+                       computeOffsetY, computeSizeX, computeSizeY, localTileX);
+        }
 
         if (mSimulationProps.isRunParallelP2P()) {
             startHaloExchangeP2P(temperatureBufferLocal[newIdx].data(), requestsP2P);
         } else if (mSimulationProps.isRunParallelRMA()) {
-            startHaloExchangeRMA(temperatureBufferLocal[newIdx].data(), window);
+            startHaloExchangeRMA(temperatureBufferLocal[newIdx].data(), windows[newIdx]);
         }
-
-        /**********************************************************************************************************************/
-        /*                           Compute the rest of the tile. Use updateTile method. */
-        /**********************************************************************************************************************/
-
-        updateTile(temperatureBufferLocal[oldIdx].data(), temperatureBufferLocal[newIdx].data(),
-                   materialPropertiesLocal.data(), materialTypesLocal.data(), 2 * haloZoneSize,
-                   2 * haloZoneSize, transferTileX - 2 * haloZoneSize,
-                   transferTileY - 2 * haloZoneSize, localTileX);
 
         /**********************************************************************************************************************/
         /*                            Wait for all halo zone exchanges to finalize. */
         /**********************************************************************************************************************/
 
-        awaitHaloExchangeP2P(requestsP2P);
+        if (mSimulationProps.isRunParallelP2P()) {
+            awaitHaloExchangeP2P(requestsP2P);
+        } else if (mSimulationProps.isRunParallelRMA()) {
+            awaitHaloExchangeRMA(windows[newIdx]);
+        }
 
-        if (shouldStoreData(iter)) {
+        if (shouldStoreData(iter) && !mSimulationProps.getOutputFileName().empty()) {
             /**********************************************************************************************************************/
             /*                          Store the data into the output file using parallel or
              * sequential IO.                      */
@@ -449,16 +536,24 @@ void ParallelHeatSolver::run(std::vector<float, AlignedAllocator<float>> &outRes
             if (mSimulationProps.useParallelIO()) {
                 storeDataIntoFileParallel(mFileHandle, iter, temperatureBufferLocal[newIdx].data());
             } else {
-                storeDataIntoFileSequential(mFileHandle, iter,
-                                            temperatureBufferLocal[newIdx].data());
+                gatherTiles<float>(temperatureBufferLocal[newIdx].data(), gatheredData.data());
+                if (mWorldRank == 0) {
+                    storeDataIntoFileSequential(mFileHandle, iter, gatheredData.data());
+                }
             }
         }
 
-        if (shouldPrintProgress(iter) && shouldComputeMiddleColumnAverageTemperature()) {
+        if (shouldPrintProgress(iter)) {
             /**********************************************************************************************************************/
             /*                 Compute and print middle column average temperature and print
              * progress report.                     */
             /**********************************************************************************************************************/
+            middleColAvgTemp = computeMiddleColumnAverageTemperatureParallel(
+                temperatureBufferLocal[newIdx].data());
+
+            if (mWorldRank == 0) {
+                printProgressReport(iter, middleColAvgTemp);
+            }
         }
     }
 
@@ -470,11 +565,17 @@ void ParallelHeatSolver::run(std::vector<float, AlignedAllocator<float>> &outRes
     /**********************************************************************************************************************/
 
     gatherTiles<float>(temperatureBufferLocal[resIdx].data(), outResult.data());
+    const double elapsedTime = MPI_Wtime() - startTime;
 
     /**********************************************************************************************************************/
     /*           Compute (sequentially) and report final middle column temperature average and print
      * final report.        */
     /**********************************************************************************************************************/
+
+    if (mWorldRank == 0) {
+        middleColAvgTemp = computeMiddleColumnAverageTemperatureSequential(outResult.data());
+        printFinalReport(elapsedTime, middleColAvgTemp);
+    }
 }
 
 bool ParallelHeatSolver::shouldComputeMiddleColumnAverageTemperature() const {
@@ -491,9 +592,23 @@ float ParallelHeatSolver::computeMiddleColumnAverageTemperatureParallel(
     /*                  Implement parallel middle column average temperature computation. */
     /*                      Use OpenMP directives to accelerate the local computations. */
     /**********************************************************************************************************************/
+    float localSum = 0.0f;
 
-    (void)localData;
-    return 0.f;
+    if (shouldComputeMiddleColumnAverageTemperature()) {
+        const std::size_t globalMiddleCol = mMaterialProps.getEdgeSize() / 2;
+        const std::size_t tileStartX = static_cast<std::size_t>(mCoords[0]) * transferTileX;
+        const std::size_t localMiddleCol = haloZoneSize + (globalMiddleCol - tileStartX);
+
+#pragma omp parallel for reduction(+ : localSum)
+        for (std::size_t row = haloZoneSize; row < haloZoneSize + transferTileY; ++row) {
+            localSum += localData[row * localTileX + localMiddleCol];
+        }
+    }
+
+    float globalSum = 0.0f;
+    MPI_Allreduce(&localSum, &globalSum, 1, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
+
+    return globalSum / static_cast<float>(mMaterialProps.getEdgeSize());
 }
 
 float ParallelHeatSolver::computeMiddleColumnAverageTemperatureSequential(
@@ -502,9 +617,15 @@ float ParallelHeatSolver::computeMiddleColumnAverageTemperatureSequential(
     /*                  Implement sequential middle column average temperature computation. */
     /*                      Use OpenMP directives to accelerate the local computations. */
     /**********************************************************************************************************************/
+    float middleColAvgTemp = 0.0f;
+    const std::size_t edgeSize = mMaterialProps.getEdgeSize();
 
-    (void)globalData;
-    return 0.f;
+#pragma omp parallel for reduction(+ : middleColAvgTemp)
+    for (std::size_t i = 0; i < edgeSize; ++i) {
+        middleColAvgTemp += globalData[i * edgeSize + edgeSize / 2];
+    }
+
+    return middleColAvgTemp / static_cast<float>(edgeSize);
 }
 
 void ParallelHeatSolver::openOutputFileSequential() {
@@ -523,13 +644,16 @@ void ParallelHeatSolver::storeDataIntoFileSequential(hid_t fileHandle, std::size
 
 void ParallelHeatSolver::openOutputFileParallel() {
 #ifdef H5_HAVE_PARALLEL
-    Hdf5PropertyListHandle faplHandle{};
+    Hdf5PropertyListHandle faplHandle(H5Pcreate(H5P_FILE_ACCESS));
 
     /**********************************************************************************************************************/
     /*                          Open output HDF5 file for parallel access with alignment. */
     /*      Set up faplHandle to use MPI-IO and alignment. The handle will automatically release the
      * resource.            */
     /**********************************************************************************************************************/
+
+    H5Pset_fapl_mpio(faplHandle, MPI_COMM_WORLD, MPI_INFO_NULL);
+    H5Pset_alignment(faplHandle, 0, 1 << 20);
 
     mFileHandle = H5Fcreate(mSimulationProps.getOutputFileName(codeType).c_str(), H5F_ACC_TRUNC,
                             H5P_DEFAULT, faplHandle);
@@ -565,10 +689,15 @@ void ParallelHeatSolver::storeDataIntoFileParallel(hid_t fileHandle,
         /*               Note that the X and Y coordinates are swapped (but data not altered). */
         /**********************************************************************************************************************/
 
+        const std::array<hsize_t, 2> tileOffset{static_cast<hsize_t>(mCoords[1] * transferTileY),
+                                                static_cast<hsize_t>(mCoords[0] * transferTileX)};
+        const std::array<hsize_t, 2> tileSize{static_cast<hsize_t>(transferTileY),
+                                              static_cast<hsize_t>(transferTileX)};
+
         // Create new dataspace and dataset using it.
         static constexpr std::string_view dataSetName{"Temperature"};
 
-        Hdf5PropertyListHandle datasetPropListHandle{};
+        Hdf5PropertyListHandle datasetPropListHandle(H5Pcreate(H5P_DATASET_CREATE));
 
         /**********************************************************************************************************************/
         /*                            Create dataset property list to set up chunking. */
@@ -576,12 +705,18 @@ void ParallelHeatSolver::storeDataIntoFileParallel(hid_t fileHandle,
          * variable.                   */
         /**********************************************************************************************************************/
 
+        H5Pset_chunk(datasetPropListHandle, 2, tileSize.data());
+
         Hdf5DataspaceHandle dataSpaceHandle(H5Screate_simple(2, gridSize.data(), nullptr));
         Hdf5DatasetHandle dataSetHandle(H5Dcreate(groupHandle, dataSetName.data(), H5T_NATIVE_FLOAT,
                                                   dataSpaceHandle, H5P_DEFAULT,
                                                   datasetPropListHandle, H5P_DEFAULT));
 
-        Hdf5DataspaceHandle memSpaceHandle{};
+        const std::array<hsize_t, 2> memSpaceSize{static_cast<hsize_t>(localTileY),
+                                                  static_cast<hsize_t>(localTileX)};
+        const std::array<hsize_t, 2> memOffset{static_cast<hsize_t>(haloZoneSize),
+                                               static_cast<hsize_t>(haloZoneSize)};
+        Hdf5DataspaceHandle memSpaceHandle(H5Screate_simple(2, memSpaceSize.data(), nullptr));
 
         /**********************************************************************************************************************/
         /*                Create memory dataspace representing tile in the memory (set up
@@ -594,13 +729,20 @@ void ParallelHeatSolver::storeDataIntoFileParallel(hid_t fileHandle,
         /*                           (given by position of the tile in global domain). */
         /**********************************************************************************************************************/
 
-        Hdf5PropertyListHandle propListHandle{};
+        H5Sselect_hyperslab(memSpaceHandle, H5S_SELECT_SET, memOffset.data(), nullptr,
+                            tileSize.data(), nullptr);
+        H5Sselect_hyperslab(dataSpaceHandle, H5S_SELECT_SET, tileOffset.data(), nullptr,
+                            tileSize.data(), nullptr);
+
+        Hdf5PropertyListHandle propListHandle(H5Pcreate(H5P_DATASET_XFER));
 
         /**********************************************************************************************************************/
         /*              Perform collective write operation, writting tiles from all processes at
          * once.                        */
         /*                                   Set up the propListHandle variable. */
         /**********************************************************************************************************************/
+
+        H5Pset_dxpl_mpio(propListHandle, H5FD_MPIO_COLLECTIVE);
 
         H5Dwrite(dataSetHandle, H5T_NATIVE_FLOAT, memSpaceHandle, dataSpaceHandle, propListHandle,
                  localData);

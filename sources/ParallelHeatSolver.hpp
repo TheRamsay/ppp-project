@@ -236,14 +236,16 @@ class ParallelHeatSolver : public HeatSolverBase {
 
     /// @brief Cartesian communicator for domain decomposition, either shape (P, 1) for 1D, or
     /// (sqrt(P), sqrt(P)) for rectangle 2D, and (sqrt(P / 2), (2 * nX)) for non rectangle
-    MPI_Comm cartComm;
-    MPI_Comm middleColComm;
+    MPI_Comm cartComm{MPI_COMM_NULL};
+    MPI_Comm middleColComm{MPI_COMM_NULL};
 
     /// @brief Represents local tile (tileX, tileY) for gather/scatter from root node
-    MPI_Datatype transferTileInt;
-    MPI_Datatype transferTileFloat;
-    MPI_Datatype haloZoneVertical;
-    MPI_Datatype haloZoneHorizontal;
+    MPI_Datatype globalTransferTileInt{MPI_DATATYPE_NULL};
+    MPI_Datatype globalTransferTileFloat{MPI_DATATYPE_NULL};
+    MPI_Datatype localTransferTileInt{MPI_DATATYPE_NULL};
+    MPI_Datatype localTransferTileFloat{MPI_DATATYPE_NULL};
+    MPI_Datatype haloZoneVertical{MPI_DATATYPE_NULL};
+    MPI_Datatype haloZoneHorizontal{MPI_DATATYPE_NULL};
 
     /// @brief Dimensions of transfer tile
     size_t transferTileX, transferTileY;
@@ -258,17 +260,19 @@ class ParallelHeatSolver : public HeatSolverBase {
 
     /// @brief Grid of local material types (iron, air, etc.) size is gonna be (tileX +
     /// haloZoneSize, tileY + haloZoneSize)
-    std::vector<int> materialTypesLocal;
+    std::vector<int, AlignedAllocator<int>> materialTypesLocal;
 
     /// @brief Grid of local material propertier (conductivity coefficient?), size is gonna be
     /// (tileX + haloZoneSize, tileY + haloZoneSize)
-    std::vector<float> materialPropertiesLocal;
+    std::vector<float, AlignedAllocator<float>> materialPropertiesLocal;
 
     /// @brief History of local temperatures, for this use case its gonna be dimensions (2,
     /// tileX + haloZoneSize, tileY + haloZoneSize)
-    std::vector<std::vector<float>> temperatureBufferLocal;
+    std::array<std::vector<float, AlignedAllocator<float>>, 2> temperatureBufferLocal;
 
-    MPI_Win window;
+    std::array<MPI_Win, 2> windows{MPI_WIN_NULL, MPI_WIN_NULL};
+    std::array<int, 2> mCoords{0, 0};
+    int mCartRank{};
 };
 
 #endif /* PARALLEL_HEAT_SOLVER_HPP */
