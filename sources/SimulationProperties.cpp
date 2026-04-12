@@ -49,7 +49,7 @@ void SimulationProperties::parseCommandLine(int argc, char *argv[]) {
                           "<string>")("w,write-intensity", "Disk write intensity",
                                       cxxopts::value<std::size_t>()->default_value("50"), "<uint>")(
         "a,airflow-rate", "Air flow rate (values in <0.0001, 0.5> make sense)",
-        cxxopts::value<float>()->default_value("0.001f"),
+        cxxopts::value<float>()->default_value("0.001"),
         "<float>")("d,debug", "Enable debugging (copare results of SEQ and PAR versions)")(
         "v,verify", "Verification mode (compare results of SEQ and PAR versions)")(
         "b,batch", "Batch mode")("B,batch-with-header",

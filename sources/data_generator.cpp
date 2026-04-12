@@ -145,9 +145,9 @@ void parseCommandline(int argc, char **argv) {
                           "<string>")("n,size", "Size of the domain (power of 2 only)",
                                       cxxopts::value<std::size_t>()->default_value("16"), "<uint>")(
         "H,heater-temperature", "Heater temperature °C",
-        cxxopts::value<float>()->default_value("100.f"), "<float>")(
+        cxxopts::value<float>()->default_value("100"), "<float>")(
         "C,air-temperature", "Cooler temperature °C",
-        cxxopts::value<float>()->default_value("20.f"), "<float>")("h,help", "Print usage");
+        cxxopts::value<float>()->default_value("20"), "<float>")("h,help", "Print usage");
 
     try {
         auto result = options.parse(argc, argv);

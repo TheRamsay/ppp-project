@@ -337,19 +337,43 @@ void ParallelHeatSolver::computeHaloZones(const float *oldTemp, float *newTemp) 
     /*                             TAKE CARE NOT TO COMPUTE THE SAME AREAS TWICE */
     /**********************************************************************************************************************/
 
-    updateTile(oldTemp, newTemp, materialPropertiesLocal.data(), materialTypesLocal.data(),
-               haloZoneSize, haloZoneSize, transferTileX, haloZoneSize, localTileX);
+    const bool hasLeft = mCoords[0] > 0;
+    const bool hasRight = mCoords[0] < static_cast<int>(processTileX) - 1;
+    const bool hasUp = mCoords[1] > 0;
+    const bool hasDown = mCoords[1] < static_cast<int>(processTileY) - 1;
 
-    updateTile(oldTemp, newTemp, materialPropertiesLocal.data(), materialTypesLocal.data(),
-               haloZoneSize, transferTileY, transferTileX, haloZoneSize, localTileX);
+    const std::size_t computeOffsetX = haloZoneSize + (hasLeft ? 0 : haloZoneSize);
+    const std::size_t computeOffsetY = haloZoneSize + (hasUp ? 0 : haloZoneSize);
+    const std::size_t computeSizeX =
+        transferTileX - (hasLeft ? 0 : haloZoneSize) - (hasRight ? 0 : haloZoneSize);
+    const std::size_t computeSizeY =
+        transferTileY - (hasUp ? 0 : haloZoneSize) - (hasDown ? 0 : haloZoneSize);
 
-    updateTile(oldTemp, newTemp, materialPropertiesLocal.data(), materialTypesLocal.data(),
-               haloZoneSize, 2 * haloZoneSize, haloZoneSize, transferTileY - 2 * haloZoneSize,
-               localTileX);
+    if (hasUp && computeSizeX > 0) {
+        updateTile(oldTemp, newTemp, materialPropertiesLocal.data(), materialTypesLocal.data(),
+                   computeOffsetX, computeOffsetY, computeSizeX, haloZoneSize, localTileX);
+    }
 
-    updateTile(oldTemp, newTemp, materialPropertiesLocal.data(), materialTypesLocal.data(),
-               transferTileX, 2 * haloZoneSize, haloZoneSize, transferTileY - 2 * haloZoneSize,
-               localTileX);
+    if (hasDown && computeSizeX > 0) {
+        updateTile(oldTemp, newTemp, materialPropertiesLocal.data(), materialTypesLocal.data(),
+                   computeOffsetX, computeOffsetY + computeSizeY - haloZoneSize, computeSizeX,
+                   haloZoneSize, localTileX);
+    }
+
+    const std::size_t verticalOffsetY = computeOffsetY + (hasUp ? haloZoneSize : 0);
+    const std::size_t verticalSizeY =
+        computeSizeY - (hasUp ? haloZoneSize : 0) - (hasDown ? haloZoneSize : 0);
+
+    if (hasLeft && verticalSizeY > 0) {
+        updateTile(oldTemp, newTemp, materialPropertiesLocal.data(), materialTypesLocal.data(),
+                   computeOffsetX, verticalOffsetY, haloZoneSize, verticalSizeY, localTileX);
+    }
+
+    if (hasRight && verticalSizeY > 0) {
+        updateTile(oldTemp, newTemp, materialPropertiesLocal.data(), materialTypesLocal.data(),
+                   computeOffsetX + computeSizeX - haloZoneSize, verticalOffsetY, haloZoneSize,
+                   verticalSizeY, localTileX);
+    }
 }
 
 void ParallelHeatSolver::startHaloExchangeP2P(float *localData,
@@ -469,14 +493,22 @@ void ParallelHeatSolver::awaitHaloExchangeRMA(MPI_Win window) {
 void ParallelHeatSolver::run(std::vector<float, AlignedAllocator<float>> &outResult) {
     std::array<MPI_Request, 8> requestsP2P{};
     std::vector<float, AlignedAllocator<float>> gatheredData;
-    const std::size_t computeOffsetX = haloZoneSize + (mCoords[0] == 0 ? haloZoneSize : 0);
-    const std::size_t computeOffsetY = haloZoneSize + (mCoords[1] == 0 ? haloZoneSize : 0);
+    const bool hasLeft = mCoords[0] > 0;
+    const bool hasRight = mCoords[0] < static_cast<int>(processTileX) - 1;
+    const bool hasUp = mCoords[1] > 0;
+    const bool hasDown = mCoords[1] < static_cast<int>(processTileY) - 1;
+    const std::size_t computeOffsetX = haloZoneSize + (hasLeft ? 0 : haloZoneSize);
+    const std::size_t computeOffsetY = haloZoneSize + (hasUp ? 0 : haloZoneSize);
     const std::size_t computeSizeX =
-        transferTileX - (mCoords[0] == 0 ? haloZoneSize : 0) -
-        (mCoords[0] == static_cast<int>(processTileX) - 1 ? haloZoneSize : 0);
+        transferTileX - (hasLeft ? 0 : haloZoneSize) - (hasRight ? 0 : haloZoneSize);
     const std::size_t computeSizeY =
-        transferTileY - (mCoords[1] == 0 ? haloZoneSize : 0) -
-        (mCoords[1] == static_cast<int>(processTileY) - 1 ? haloZoneSize : 0);
+        transferTileY - (hasUp ? 0 : haloZoneSize) - (hasDown ? 0 : haloZoneSize);
+    const std::size_t innerOffsetX = computeOffsetX + (hasLeft ? haloZoneSize : 0);
+    const std::size_t innerOffsetY = computeOffsetY + (hasUp ? haloZoneSize : 0);
+    const std::size_t innerSizeX =
+        computeSizeX - (hasLeft ? haloZoneSize : 0) - (hasRight ? haloZoneSize : 0);
+    const std::size_t innerSizeY =
+        computeSizeY - (hasUp ? haloZoneSize : 0) - (hasDown ? haloZoneSize : 0);
 
     if (mWorldRank == 0 && !mSimulationProps.useParallelIO() &&
         !mSimulationProps.getOutputFileName().empty()) {
@@ -511,7 +543,7 @@ void ParallelHeatSolver::run(std::vector<float, AlignedAllocator<float>> &outRes
               temperatureBufferLocal[1].begin());
 
     float middleColAvgTemp = 0.0f;
-    const double startTime = MPI_Wtime();
+    double startTime = MPI_Wtime();
 
     // 3. Start main iterative simulation loop.
     for (std::size_t iter = 0; iter < mSimulationProps.getNumIterations(); ++iter) {
@@ -521,11 +553,8 @@ void ParallelHeatSolver::run(std::vector<float, AlignedAllocator<float>> &outRes
         /**********************************************************************************************************************/
         /*                            Compute and exchange halo zones using P2P or RMA. */
         /**********************************************************************************************************************/
-        if (computeSizeX > 0 && computeSizeY > 0) {
-            updateTile(temperatureBufferLocal[oldIdx].data(), temperatureBufferLocal[newIdx].data(),
-                       materialPropertiesLocal.data(), materialTypesLocal.data(), computeOffsetX,
-                       computeOffsetY, computeSizeX, computeSizeY, localTileX);
-        }
+        computeHaloZones(temperatureBufferLocal[oldIdx].data(),
+                         temperatureBufferLocal[newIdx].data());
 
         if (mSimulationProps.isRunParallelP2P()) {
             startHaloExchangeP2P(temperatureBufferLocal[newIdx].data(), requestsP2P);
@@ -534,9 +563,17 @@ void ParallelHeatSolver::run(std::vector<float, AlignedAllocator<float>> &outRes
         }
 
         /**********************************************************************************************************************/
+        /*                           Compute the rest of the tile. Use updateTile method.                                     */
+        /**********************************************************************************************************************/
+        if (innerSizeX > 0 && innerSizeY > 0) {
+            updateTile(temperatureBufferLocal[oldIdx].data(), temperatureBufferLocal[newIdx].data(),
+                       materialPropertiesLocal.data(), materialTypesLocal.data(), innerOffsetX,
+                       innerOffsetY, innerSizeX, innerSizeY, localTileX);
+        }
+
+        /**********************************************************************************************************************/
         /*                            Wait for all halo zone exchanges to finalize. */
         /**********************************************************************************************************************/
-
         if (mSimulationProps.isRunParallelP2P()) {
             awaitHaloExchangeP2P(requestsP2P);
         } else if (mSimulationProps.isRunParallelRMA()) {
@@ -558,7 +595,7 @@ void ParallelHeatSolver::run(std::vector<float, AlignedAllocator<float>> &outRes
             }
         }
 
-        if (shouldPrintProgress(iter)) {
+        if (shouldPrintProgress(iter) && shouldComputeMiddleColumnAverageTemperature()) {
             /**********************************************************************************************************************/
             /*                 Compute and print middle column average temperature and print
              * progress report.                     */
@@ -566,7 +603,9 @@ void ParallelHeatSolver::run(std::vector<float, AlignedAllocator<float>> &outRes
             middleColAvgTemp = computeMiddleColumnAverageTemperatureParallel(
                 temperatureBufferLocal[newIdx].data());
 
-            if (mWorldRank == 0) {
+            int middleColRank;
+            MPI_Comm_rank(middleColComm, &middleColRank);
+            if (middleColRank == 0) {
                 printProgressReport(iter, middleColAvgTemp);
             }
         }
@@ -575,12 +614,13 @@ void ParallelHeatSolver::run(std::vector<float, AlignedAllocator<float>> &outRes
     const std::size_t resIdx =
         mSimulationProps.getNumIterations() % 2; // Index of the buffer with final temperatures
 
+    double elapsedTime = MPI_Wtime() - startTime;
+
     /**********************************************************************************************************************/
-    /*                                     Gather final domain temperature. */
+    /*                                     Gather final domain temperature.                                               */
     /**********************************************************************************************************************/
 
     gatherTiles<float>(temperatureBufferLocal[resIdx].data(), outResult.data());
-    const double elapsedTime = MPI_Wtime() - startTime;
 
     /**********************************************************************************************************************/
     /*           Compute (sequentially) and report final middle column temperature average and
@@ -609,19 +649,17 @@ float ParallelHeatSolver::computeMiddleColumnAverageTemperatureParallel(
     /**********************************************************************************************************************/
     float localSum = 0.0f;
 
-    if (shouldComputeMiddleColumnAverageTemperature()) {
-        const std::size_t globalMiddleCol = mMaterialProps.getEdgeSize() / 2;
-        const std::size_t tileStartX = static_cast<std::size_t>(mCoords[0]) * transferTileX;
-        const std::size_t localMiddleCol = haloZoneSize + (globalMiddleCol - tileStartX);
+    const std::size_t globalMiddleCol = mMaterialProps.getEdgeSize() / 2;
+    const std::size_t tileStartX = static_cast<std::size_t>(mCoords[0]) * transferTileX;
+    const std::size_t localMiddleCol = haloZoneSize + (globalMiddleCol - tileStartX);
 
 #pragma omp parallel for reduction(+ : localSum)
-        for (std::size_t row = haloZoneSize; row < haloZoneSize + transferTileY; ++row) {
-            localSum += localData[row * localTileX + localMiddleCol];
-        }
+    for (std::size_t row = haloZoneSize; row < haloZoneSize + transferTileY; ++row) {
+        localSum += localData[row * localTileX + localMiddleCol];
     }
 
     float globalSum = 0.0f;
-    MPI_Allreduce(&localSum, &globalSum, 1, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(&localSum, &globalSum, 1, MPI_FLOAT, MPI_SUM, middleColComm);
 
     return globalSum / static_cast<float>(mMaterialProps.getEdgeSize());
 }
