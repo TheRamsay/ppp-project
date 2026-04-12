@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#SBATCH --account=DD-24-108
+#SBATCH --account=ATR-25-7
 #SBATCH --job-name=PPP_PROJ01_HYBRID_1D
 #SBATCH -p qcpu
 #SBATCH -t 05:00:00
@@ -12,7 +12,7 @@ source load_modules.sh
 
 declare -a SIZES=(256 512 1024 2048 4096)
 declare -a PROCESSES=(1 2 4 8 16)
-declare PROJ_ID="dd-24-108"
+declare PROJ_ID="atr-25-7"
 
 STDOUT_FILE="run_full_hybrid_1d_out.csv"
 STDERR_FILE="run_full_hybrid_1d_err.txt"
@@ -31,8 +31,10 @@ mkdir -p $OUT_FILE_PATH
 
 # Doplnte vhodne nastavenie Lustre file system #
 ################################################
+lfs setstripe -S 1M -c 16 $OUT_FILE_PATH
 
 ################################################
+lfs setstripe -S 1M -c 16 $OUT_FILE_PATH
 
 DISK_WRITE_INTENSITY=50
 
