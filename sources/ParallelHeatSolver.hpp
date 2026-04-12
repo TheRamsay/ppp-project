@@ -273,6 +273,14 @@ class ParallelHeatSolver : public HeatSolverBase {
     std::array<MPI_Win, 2> windows{MPI_WIN_NULL, MPI_WIN_NULL};
     std::array<int, 2> mCoords{0, 0};
     int mCartRank{};
+
+    /// @brief Contiguous buffers for optimized RMA halo exchange
+    std::vector<float> rmaSendBuf;
+    std::vector<float> rmaRecvBuf;
+    MPI_Win rmaHaloWindow{MPI_WIN_NULL};
+    std::size_t rmaVertSize{};
+    std::size_t rmaHorizSize{};
+    float *rmaLocalDataPtr{nullptr};
 };
 
 #endif /* PARALLEL_HEAT_SOLVER_HPP */
