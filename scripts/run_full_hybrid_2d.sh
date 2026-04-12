@@ -34,7 +34,6 @@ mkdir -p $OUT_FILE_PATH
 lfs setstripe -S 1M -c 16 $OUT_FILE_PATH
 
 ################################################
-lfs setstripe -S 1M -c 16 $OUT_FILE_PATH
 
 DISK_WRITE_INTENSITY=50
 
