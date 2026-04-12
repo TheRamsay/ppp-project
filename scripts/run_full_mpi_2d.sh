@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#SBATCH --account=DD-24-108
+#SBATCH --account=ATR-25-7
 #SBATCH --job-name=PPP_PROJ01_MPI
 #SBATCH -p qcpu
 #SBATCH -t 05:00:00
@@ -11,7 +11,7 @@ source load_modules.sh
 
 declare -a SIZES=(256 512 1024 2048 4096)
 declare -a PROCESSES=(1 16 32 64 128)
-declare PROJ_ID="dd-24-108"
+declare PROJ_ID="atr-25-7"
 
 STDOUT_FILE="run_full_mpi_2d_out.csv"
 STDERR_FILE="run_full_mpi_2d_err.txt"

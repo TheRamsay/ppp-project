@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#SBATCH --account=DD-24-108
+#SBATCH --account=ATR-25-7
 #SBATCH --job-name=PPP_PROJ01_PROF
 #SBATCH -p qcpu
 #SBATCH -t 01:00:00
