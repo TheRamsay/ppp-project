@@ -456,34 +456,22 @@ void ParallelHeatSolver::startHaloExchangeRMA(float *localData, MPI_Win window) 
     MPI_Cart_shift(cartComm, 0, 1, &leftRank, &rightRank);
     MPI_Cart_shift(cartComm, 1, 1, &upRank, &downRank);
 
-    // Pack left interior edge into sendBuf[0..rmaVertSize)
-    for (std::size_t row = 0; row < transferTileY; ++row) {
-        for (std::size_t col = 0; col < haloZoneSize; ++col) {
-            rmaSendBuf[row * haloZoneSize + col] =
-                localData[(haloZoneSize + row) * localTileX + haloZoneSize + col];
-        }
-    }
-    // Pack right interior edge into sendBuf[rmaVertSize..2*rmaVertSize)
-    for (std::size_t row = 0; row < transferTileY; ++row) {
-        for (std::size_t col = 0; col < haloZoneSize; ++col) {
-            rmaSendBuf[rmaVertSize + row * haloZoneSize + col] =
-                localData[(haloZoneSize + row) * localTileX + transferTileX + col];
-        }
-    }
-    // Pack top interior edge into sendBuf[2*rmaVertSize..2*rmaVertSize+rmaHorizSize)
-    for (std::size_t row = 0; row < haloZoneSize; ++row) {
-        for (std::size_t col = 0; col < transferTileX; ++col) {
-            rmaSendBuf[2 * rmaVertSize + row * transferTileX + col] =
-                localData[(haloZoneSize + row) * localTileX + haloZoneSize + col];
-        }
-    }
-    // Pack bottom interior edge into sendBuf[2*rmaVertSize+rmaHorizSize..)
-    for (std::size_t row = 0; row < haloZoneSize; ++row) {
-        for (std::size_t col = 0; col < transferTileX; ++col) {
-            rmaSendBuf[2 * rmaVertSize + rmaHorizSize + row * transferTileX + col] =
-                localData[(transferTileY + row) * localTileX + haloZoneSize + col];
-        }
-    }
+    const std::size_t leftInterior = haloZoneSize * localTileX + haloZoneSize;
+    const std::size_t rightInterior = haloZoneSize * localTileX + transferTileX;
+    const std::size_t topInterior = haloZoneSize * localTileX + haloZoneSize;
+    const std::size_t bottomInterior = transferTileY * localTileX + haloZoneSize;
+    const int bufSizeBytes = static_cast<int>(rmaSendBuf.size() * sizeof(float));
+    int position = 0;
+
+    // Pack all 4 edges using MPI_Pack with existing derived datatypes
+    MPI_Pack(localData + leftInterior, 1, haloZoneVertical,
+             rmaSendBuf.data(), bufSizeBytes, &position, cartComm);
+    MPI_Pack(localData + rightInterior, 1, haloZoneVertical,
+             rmaSendBuf.data(), bufSizeBytes, &position, cartComm);
+    MPI_Pack(localData + topInterior, 1, haloZoneHorizontal,
+             rmaSendBuf.data(), bufSizeBytes, &position, cartComm);
+    MPI_Pack(localData + bottomInterior, 1, haloZoneHorizontal,
+             rmaSendBuf.data(), bufSizeBytes, &position, cartComm);
 
     MPI_Win_fence(0, rmaHaloWindow);
 
@@ -534,37 +522,23 @@ void ParallelHeatSolver::awaitHaloExchangeRMA(MPI_Win window) {
     /**********************************************************************************************************************/
     MPI_Win_fence(0, rmaHaloWindow);
 
-    // Unpack contiguous recv buffers into halo positions
+    // Unpack contiguous recv buffers into halo positions using MPI_Unpack
     float *localData = rmaLocalDataPtr;
+    const std::size_t leftHalo = haloZoneSize * localTileX;
+    const std::size_t rightHalo = haloZoneSize * localTileX + transferTileX + haloZoneSize;
+    const std::size_t topHalo = haloZoneSize;
+    const std::size_t bottomHalo = (transferTileY + haloZoneSize) * localTileX + haloZoneSize;
+    const int recvBufSizeBytes = static_cast<int>(rmaRecvBuf.size() * sizeof(float));
+    int position = 0;
 
-    // Unpack left halo from recvBuf[0..rmaVertSize)
-    for (std::size_t row = 0; row < transferTileY; ++row) {
-        for (std::size_t col = 0; col < haloZoneSize; ++col) {
-            localData[(haloZoneSize + row) * localTileX + col] =
-                rmaRecvBuf[row * haloZoneSize + col];
-        }
-    }
-    // Unpack right halo from recvBuf[rmaVertSize..2*rmaVertSize)
-    for (std::size_t row = 0; row < transferTileY; ++row) {
-        for (std::size_t col = 0; col < haloZoneSize; ++col) {
-            localData[(haloZoneSize + row) * localTileX + transferTileX + haloZoneSize + col] =
-                rmaRecvBuf[rmaVertSize + row * haloZoneSize + col];
-        }
-    }
-    // Unpack top halo from recvBuf[2*rmaVertSize..2*rmaVertSize+rmaHorizSize)
-    for (std::size_t row = 0; row < haloZoneSize; ++row) {
-        for (std::size_t col = 0; col < transferTileX; ++col) {
-            localData[row * localTileX + haloZoneSize + col] =
-                rmaRecvBuf[2 * rmaVertSize + row * transferTileX + col];
-        }
-    }
-    // Unpack bottom halo from recvBuf[2*rmaVertSize+rmaHorizSize..)
-    for (std::size_t row = 0; row < haloZoneSize; ++row) {
-        for (std::size_t col = 0; col < transferTileX; ++col) {
-            localData[(transferTileY + haloZoneSize + row) * localTileX + haloZoneSize + col] =
-                rmaRecvBuf[2 * rmaVertSize + rmaHorizSize + row * transferTileX + col];
-        }
-    }
+    MPI_Unpack(rmaRecvBuf.data(), recvBufSizeBytes, &position,
+               localData + leftHalo, 1, haloZoneVertical, cartComm);
+    MPI_Unpack(rmaRecvBuf.data(), recvBufSizeBytes, &position,
+               localData + rightHalo, 1, haloZoneVertical, cartComm);
+    MPI_Unpack(rmaRecvBuf.data(), recvBufSizeBytes, &position,
+               localData + topHalo, 1, haloZoneHorizontal, cartComm);
+    MPI_Unpack(rmaRecvBuf.data(), recvBufSizeBytes, &position,
+               localData + bottomHalo, 1, haloZoneHorizontal, cartComm);
 }
 
 void ParallelHeatSolver::run(std::vector<float, AlignedAllocator<float>> &outResult) {
