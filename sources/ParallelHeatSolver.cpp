@@ -810,7 +810,7 @@ void ParallelHeatSolver::storeDataIntoFileParallel(hid_t fileHandle,
          * datasetPropListHandle variable.                   */
         /**********************************************************************************************************************/
 
-        H5Pset_chunk(datasetPropListHandle, 2, tileSize.data());
+        H5Pset_chunk(datasetPropListHandle, 2, gridSize.data());
 
         Hdf5DataspaceHandle dataSpaceHandle(H5Screate_simple(2, gridSize.data(), nullptr));
         Hdf5DatasetHandle dataSetHandle(H5Dcreate(groupHandle, dataSetName.data(), H5T_NATIVE_FLOAT,
