@@ -237,6 +237,21 @@ void ParallelHeatSolver::initHaloExchange() {
         MPI_Win_create(rmaRecvBuf.data(),
                        static_cast<MPI_Aint>(totalBufSize * sizeof(float)),
                        sizeof(float), MPI_INFO_NULL, cartComm, &rmaHaloWindow);
+
+        // Neighbor group for PSCW synchronization (post/start/complete/wait)
+        int leftRank, rightRank, upRank, downRank;
+        MPI_Cart_shift(cartComm, 0, 1, &leftRank, &rightRank);
+        MPI_Cart_shift(cartComm, 1, 1, &upRank, &downRank);
+        int neighbors[4];
+        int nNeighbors = 0;
+        if (leftRank != MPI_PROC_NULL)  neighbors[nNeighbors++] = leftRank;
+        if (rightRank != MPI_PROC_NULL) neighbors[nNeighbors++] = rightRank;
+        if (upRank != MPI_PROC_NULL)    neighbors[nNeighbors++] = upRank;
+        if (downRank != MPI_PROC_NULL)  neighbors[nNeighbors++] = downRank;
+        MPI_Group worldGroup;
+        MPI_Comm_group(cartComm, &worldGroup);
+        MPI_Group_incl(worldGroup, nNeighbors, neighbors, &mNeighborGroup);
+        MPI_Group_free(&worldGroup);
     }
 }
 
@@ -244,6 +259,10 @@ void ParallelHeatSolver::deinitHaloExchange() {
     /**********************************************************************************************************************/
     /*                            Deinitialize variables and MPI datatypes for halo exchange. */
     /**********************************************************************************************************************/
+    if (mNeighborGroup != MPI_GROUP_NULL) {
+        MPI_Group_free(&mNeighborGroup);
+        mNeighborGroup = MPI_GROUP_NULL;
+    }
     if (rmaHaloWindow != MPI_WIN_NULL) {
         MPI_Win_free(&rmaHaloWindow);
         rmaHaloWindow = MPI_WIN_NULL;
@@ -473,7 +492,8 @@ void ParallelHeatSolver::startHaloExchangeRMA(float *localData, MPI_Win window) 
     MPI_Pack(localData + bottomInterior, 1, haloZoneHorizontal,
              rmaSendBuf.data(), bufSizeBytes, &position, cartComm);
 
-    MPI_Win_fence(0, rmaHaloWindow);
+    MPI_Win_post(mNeighborGroup, 0, rmaHaloWindow);
+    MPI_Win_start(mNeighborGroup, 0, rmaHaloWindow);
 
     // Put contiguous data to neighbors' contiguous recv buffers
     if (leftRank != MPI_PROC_NULL) {
@@ -520,7 +540,8 @@ void ParallelHeatSolver::awaitHaloExchangeRMA(MPI_Win window) {
      * communication.
      */
     /**********************************************************************************************************************/
-    MPI_Win_fence(0, rmaHaloWindow);
+    MPI_Win_complete(rmaHaloWindow);
+    MPI_Win_wait(rmaHaloWindow);
 
     // Unpack contiguous recv buffers into halo positions using MPI_Unpack
     float *localData = rmaLocalDataPtr;

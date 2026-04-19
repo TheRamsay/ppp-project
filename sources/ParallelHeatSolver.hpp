@@ -278,6 +278,7 @@ class ParallelHeatSolver : public HeatSolverBase {
     std::vector<float> rmaSendBuf;
     std::vector<float> rmaRecvBuf;
     MPI_Win rmaHaloWindow{MPI_WIN_NULL};
+    MPI_Group mNeighborGroup{MPI_GROUP_NULL};
     std::size_t rmaVertSize{};
     std::size_t rmaHorizSize{};
     float *rmaLocalDataPtr{nullptr};
