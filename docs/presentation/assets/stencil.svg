@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 500" role="img" aria-label="Stencil diagram">
+  <rect width="820" height="500" fill="#fbfaf7"/>
+  <g transform="translate(155 54)">
+    <rect x="0" y="0" width="510" height="390" rx="10" fill="#fff" stroke="#d9dedf" stroke-width="2"/>
+    <g transform="translate(80 42)">
+      <g fill="none" stroke="#d9dedf" stroke-width="2">
+        <path d="M0 0h350M0 70h350M0 140h350M0 210h350M0 280h350"/>
+        <path d="M0 0v280M70 0v280M140 0v280M210 0v280M280 0v280M350 0v280"/>
+      </g>
+      <g fill="#e6f2f0" stroke="#0c7872" stroke-width="2">
+        <rect x="142" y="72" width="66" height="66" rx="8"/>
+        <rect x="142" y="212" width="66" height="66" rx="8"/>
+        <rect x="72" y="142" width="66" height="66" rx="8"/>
+        <rect x="212" y="142" width="66" height="66" rx="8"/>
+      </g>
+      <rect x="142" y="142" width="66" height="66" rx="8" fill="#0c7872"/>
+      <circle cx="175" cy="175" r="7" fill="#fff"/>
+      <g fill="none" stroke="#15191d" stroke-width="4" stroke-linecap="round">
+        <path d="M175 138v-20"/>
+        <path d="M175 212v20"/>
+        <path d="M138 175h-20"/>
+        <path d="M212 175h20"/>
+      </g>
+    </g>
+  </g>
+  <text x="410" y="470" text-anchor="middle" fill="#65717d" font-family="Inter, system-ui, sans-serif" font-size="24">lokální bod + hodnoty ze sousedních buněk</text>
+</svg>

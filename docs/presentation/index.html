@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="cs">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>PPP projekt - paralelní heat solver</title>
+
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reset.css" />
+        <link
+            rel="stylesheet"
+            href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css"
+        />
+        <link
+            rel="stylesheet"
+            href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/theme/white.css"
+        />
+        <link rel="stylesheet" href="slides.css" />
+    </head>
+    <body>
+        <div class="reveal">
+            <div class="slides">
+                <section class="cover">
+                    <div class="kicker">PPP projekt 1</div>
+                    <h1>Paralelní heat solver</h1>
+                    <footer>Dominik Huml, xhumld00</footer>
+
+                    <aside class="notes">Jen krátce uvést kontext a přejít k výsledkům.</aside>
+                </section>
+
+                <section class="story-slide compact-slide">
+                    <div class="slide-head">
+                        <span>01</span>
+                        <p>Popis řešení</p>
+                    </div>
+                    <h2>Doménu dělím na dlaždice a v každé iteraci vyměňuji halo zóny.</h2>
+                    <div class="solution-grid">
+                        <figure class="figure-plain">
+                            <img src="assets/decomposition.svg" alt="1D a 2D dekompozice domény" />
+                        </figure>
+                        <div class="text-panel compact">
+                            <p><strong>MPI</strong> 1D/2D kartézská dekompozice domény.</p>
+                            <p><strong>OpenMP</strong> výpočet bodů uvnitř lokální dlaždice.</p>
+                            <p>
+                                <strong>Halo</strong> P2P neblokující zprávy, RMA přes
+                                <code>MPI_Put</code>, packing a PSCW.
+                            </p>
+                            <p><strong>I/O</strong> HDF5 výstup s opraveným chunkováním.</p>
+                        </div>
+                    </div>
+                    <p class="bottom-line">
+                        Halo exchange se překrývá s výpočtem vnitřku dlaždice.
+                    </p>
+
+                    <aside class="notes">
+                        Popis řešení držet stručně. MPI dekompozice, OpenMP lokální výpočet, dvě
+                        komunikace, HDF5.
+                    </aside>
+                </section>
+
+                <section class="graph-slide">
+                    <div class="slide-head">
+                        <span>02</span>
+                        <p>Silné škálování</p>
+                    </div>
+                    <h2>Hybridní 2D P2P dosáhla nejlepšího zrychlení.</h2>
+                    <figure class="main-figure">
+                        <img
+                            src="../figures/ppp_speedup_hybrid_p2p.png"
+                            alt="Silné škálování Hybrid 2D P2P"
+                        />
+                    </figure>
+                    <div class="insight-row">
+                        <div><strong>~666×</strong><span>\(4096^2\), 256 jader, bez I/O</span></div>
+                        <p>
+                            Superlineární zrychlení odpovídá cache efektu. Menší dlaždice se vejdou
+                            do L3 cache lépe než celá sekvenční doména.
+                        </p>
+                    </div>
+
+                    <aside class="notes">
+                        Říct nejlepší konfiguraci a důvod superlinear speedupu. Graf je důkaz,
+                        nečíst všechny body.
+                    </aside>
+                </section>
+
+                <section class="graph-slide">
+                    <div class="slide-head">
+                        <span>03</span>
+                        <p>Silné škálování</p>
+                    </div>
+                    <h2>Čisté MPI 2D škáluje stabilně, ale končí na nižším počtu jader.</h2>
+                    <figure class="main-figure">
+                        <img
+                            src="../figures/ppp_speedup_mpi_p2p.png"
+                            alt="Silné škálování MPI 2D P2P"
+                        />
+                    </figure>
+                    <div class="insight-row">
+                        <div><strong>~354×</strong><span>\(4096^2\), 128 MPI ranků</span></div>
+                        <p>
+                            Čisté MPI potvrzuje přínos 2D dekompozice. Hybridní varianta však dokáže
+                            využít více jader přes OpenMP.
+                        </p>
+                    </div>
+
+                    <aside class="notes">
+                        Druhý strong scaling graf. Čisté MPI 2D je stabilní, ale v měření jde do 128
+                        jader, zatímco hybridní varianta jde na 256.
+                    </aside>
+                </section>
+
+                <section class="graph-slide">
+                    <div class="slide-head">
+                        <span>04</span>
+                        <p>Silné škálování</p>
+                    </div>
+                    <h2>Hybridní 1D varianta zaostává kvůli většímu objemu halo dat.</h2>
+                    <figure class="main-figure">
+                        <img
+                            src="../figures/ppp_speedup_hybrid_1D_p2p.png"
+                            alt="Silné škálování Hybrid 1D P2P"
+                        />
+                    </figure>
+                    <div class="insight-row">
+                        <div><strong>pod 2D</strong><span>\(4096^2\), 256 jader</span></div>
+                        <p>
+                            1D dekompozice posílá delší hrany. V reportu vychází přibližně 1,6×
+                            slabší než Hybrid 2D.
+                        </p>
+                    </div>
+
+                    <aside class="notes">
+                        Třetí strong scaling graf. Hybridní 1D pořád škáluje, ale kvůli halo objemu
+                        je slabší než Hybrid 2D. Držet interpretaci přes poměr vůči 2D, ne přes
+                        přesné číslo.
+                    </aside>
+                </section>
+
+                <section class="graph-slide">
+                    <div class="slide-head">
+                        <span>05</span>
+                        <p>Slabé škálování</p>
+                    </div>
+                    <h2>2D dekompozice drží efektivitu lépe než 1D.</h2>
+                    <figure class="main-figure wide">
+                        <img src="../figures/ppp_weak_scaling.png" alt="Slabé škálování" />
+                    </figure>
+                    <div class="insight-row three">
+                        <div><strong>MPI 2D</strong><span>82,2 % na 256 jádrech</span></div>
+                        <div><strong>Hybrid 2D</strong><span>78,5 % na 128 jádrech</span></div>
+                        <div><strong>Hybrid 1D</strong><span>55,5 % na 256 jádrech</span></div>
+                    </div>
+
+                    <aside class="notes">
+                        Slabé škálování měří růst úlohy s počtem procesů. 2D drží efektivitu lépe,
+                        1D posílá dlouhé hrany.
+                    </aside>
+                </section>
+
+                <section class="story-slide rma-focus">
+                    <div class="slide-head">
+                        <span>06</span>
+                        <p>RMA optimalizace</p>
+                    </div>
+                    <h2>Původní RMA bylo pomalé kvůli třem nezávislým faktorům.</h2>
+                    <div class="before-after">
+                        <div class="lane bad">
+                            <span class="lane-label">původní</span>
+                            <strong>strided <code>MPI_Get</code></strong>
+                            <strong>derived datatype</strong>
+                            <strong><code>MPI_Win_fence</code></strong>
+                        </div>
+                        <div class="lane-arrow">→</div>
+                        <div class="lane good">
+                            <span class="lane-label">finální</span>
+                            <strong>packed <code>MPI_Put</code></strong>
+                            <strong>souvislý buffer</strong>
+                            <strong>PSCW sousedé</strong>
+                        </div>
+                    </div>
+                    <p class="bottom-line">
+                        Izolované měření oddělilo směr RMA operace, layout dat i synchronizaci.
+                    </p>
+
+                    <aside class="notes">
+                        Vysvětlit, že RMA nebylo optimalizované jedním trikem. Izolované měření
+                        oddělilo Get vs Put, strided vs packed, fence vs PSCW.
+                    </aside>
+                </section>
+
+                <section class="story-slide rma-focus">
+                    <div class="slide-head">
+                        <span>07</span>
+                        <p>Izolované měření RMA</p>
+                    </div>
+                    <h2>
+                        Největší zisk byl přechod z <code>MPI_Get</code> na <code>MPI_Put</code>.
+                    </h2>
+                    <table class="booktabs">
+                        <thead>
+                            <tr>
+                                <th>Faktor</th>
+                                <th>Změna</th>
+                                <th>Zrychlení</th>
+                                <th>Interpretace</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Směr RMA</td>
+                                <td><code>MPI_Get</code> → <code>MPI_Put</code></td>
+                                <td class="num">55-80×</td>
+                                <td>dominantní problém původní varianty</td>
+                            </tr>
+                            <tr>
+                                <td>Layout dat</td>
+                                <td>strided halo → packed buffer</td>
+                                <td class="num">1,5-3×</td>
+                                <td>méně režie v MPI datových typech</td>
+                            </tr>
+                            <tr>
+                                <td>Synchronizace</td>
+                                <td><code>MPI_Win_fence</code> → PSCW</td>
+                                <td class="num">1,15-1,74×</td>
+                                <td>synchronizují se jen sousedé</td>
+                            </tr>
+                            <tr class="total">
+                                <td>Celkem</td>
+                                <td>naive RMA → finální RMA</td>
+                                <td class="num">133-268×</td>
+                                <td>kombinovaný efekt všech změn</td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <aside class="notes">
+                        Zdůraznit, že 55-80x není celé RMA zrychlení, ale samotný Get → Put faktor
+                        pro strided halo. Packing pomohl strided hranám, PSCW roste hlavně přes
+                        uzly.
+                    </aside>
+                </section>
+
+                <section class="graph-slide">
+                    <div class="slide-head">
+                        <span>08</span>
+                        <p>Vampir časová osa</p>
+                    </div>
+                    <h2>Iterace mají pravidelný vzor výpočtu, komunikace a čekání.</h2>
+                    <figure class="main-figure wide">
+                        <img
+                            src="../figures/scorep/Master_Timeline_p2p_2d_trace.png"
+                            alt="Vampir Master Timeline"
+                        />
+                    </figure>
+                    <p class="bottom-line">
+                        Timeline ukazuje poměr výpočtu a MPI částí v jedné iteraci. Čekání na halo
+                        je vidět na konci iterací.
+                    </p>
+
+                    <aside class="notes">
+                        Splňuje poměr komunikace vs. výpočet. Hnědá výpočet, modrá MPI. Výpočet
+                        dominuje, ale čekání existuje.
+                    </aside>
+                </section>
+
+                <section class="graph-slide">
+                    <div class="slide-head">
+                        <span>09</span>
+                        <p>Vampir Function Summary</p>
+                    </div>
+                    <h2>Výpočetní jádro dominuje nad komunikační režií.</h2>
+                    <figure class="main-figure portrait">
+                        <img
+                            src="../figures/scorep/Function_Summary_p2p_2d_trace.png"
+                            alt="Vampir Function Summary"
+                        />
+                    </figure>
+                    <p class="bottom-line">
+                        Function Summary potvrzuje, že největší část času patří výpočtu bodů. MPI
+                        části jsou hlavně synchronizace halo výměny.
+                    </p>
+
+                    <aside class="notes">
+                        Konkrétní výstup k poměru funkcí. Při dostatku času zmínit
+                        computePoint/updateTile vs MPI wait.
+                    </aside>
+                </section>
+
+                <section class="graph-slide">
+                    <div class="slide-head">
+                        <span>10</span>
+                        <p>Vampir Process Summary</p>
+                    </div>
+                    <h2>Zátěž je mezi procesy vyrovnaná.</h2>
+                    <figure class="main-figure portrait">
+                        <img
+                            src="../figures/scorep/Process_Summary_p2p_2d_trace.png"
+                            alt="Vampir Process Summary"
+                        />
+                    </figure>
+                    <p class="bottom-line">
+                        Procesy mají podobný čas ve výpočtu i v MPI, protože dlaždice mají stejnou
+                        velikost a stencil má pevnou cenu na bod.
+                    </p>
+
+                    <aside class="notes">
+                        Tímhle pokrýváme vyvážení zátěže. Dlaždice stejné velikosti, computePoint
+                        konstantní práce.
+                    </aside>
+                </section>
+
+                <section class="graph-slide">
+                    <div class="slide-head">
+                        <span>11</span>
+                        <p>Vampir komunikace</p>
+                    </div>
+                    <h2>2D komunikace má více sousedů, ale menší objem na hranu.</h2>
+                    <figure class="main-figure portrait">
+                        <img
+                            src="../figures/scorep/Communication_Matrix_View_p2p_2d_trace_2.png"
+                            alt="Vampir komunikační matice"
+                        />
+                    </figure>
+                    <div class="insight-row">
+                        <div><strong>210 KiB</strong><span>maximum škály u 2D</span></div>
+                        <p>
+                            U 1D byl odpovídající maximální agregovaný objem 840 KiB. 2D komunikuje
+                            s více sousedy, ale kratšími hranami.
+                        </p>
+                    </div>
+
+                    <aside class="notes">
+                        Držet se reportu. 1D maximum škály 840 KiB, 2D 210 KiB. Neříkat neověřenou
+                        propustnost.
+                    </aside>
+                </section>
+
+                <section class="graph-slide">
+                    <div class="slide-head">
+                        <span>12</span>
+                        <p>Cube topologie</p>
+                    </div>
+                    <h2>Cube potvrzuje rovnoměrný objem halo komunikace.</h2>
+                    <figure class="main-figure wide">
+                        <img src="../figures/scorep/cube2.png" alt="Cube topologie procesů" />
+                    </figure>
+                    <p class="bottom-line">
+                        Ve 2D výstupu vyniká rank 0 kvůli scatter/gather. Ostatních 15 ranků má
+                        téměř shodný objem halo komunikace.
+                    </p>
+
+                    <aside class="notes">
+                        Cube výstup podle reportu. Rank 0 vyniká kvůli scatter/gather, ostatní ranky
+                        jsou téměř stejné.
+                    </aside>
+                </section>
+
+                <section class="story-slide">
+                    <div class="slide-head">
+                        <span>13</span>
+                        <p>Zdůvodnění výsledků</p>
+                    </div>
+                    <h2>Výsledky vysvětlují dekompozice, cache a I/O.</h2>
+                    <div class="reason-grid no-rma">
+                        <div class="equation-block">
+                            <p class="small-label">dekompozice</p>
+                            <p class="equation">
+                                \( \frac{V_{\mathrm{1D}}}{V_{\mathrm{2D}}} = \frac{\sqrt{P}}{2} \)
+                            </p>
+                            <p>2D snižuje objem halo dat při větším počtu procesů.</p>
+                        </div>
+                        <div class="text-panel compact">
+                            <p>
+                                <strong>Cache efekt</strong> sekvenční \(4096^2\) doména se nevejde
+                                do L3 cache, rozdělené dlaždice ano.
+                            </p>
+                            <p>
+                                <strong>Důsledek</strong> nejlepší běh je superlineární vůči 256
+                                jádrům.
+                            </p>
+                        </div>
+                        <div class="text-panel compact">
+                            <p>
+                                <strong>I/O</strong> oprava HDF5 chunkování výrazně zlepšila
+                                původní paralelní zápis.
+                            </p>
+                            <p>
+                                <strong>Limit</strong> pro malé snapshoty 4-64 MB může stále
+                                dominovat režie Lustre koordinace.
+                            </p>
+                        </div>
+                    </div>
+
+                    <aside class="notes">
+                        RMA už bylo na vlastních slidech. Zde pouze dekompozice, cache efekt a I/O.
+                    </aside>
+                </section>
+
+                <section class="closing">
+                    <div class="kicker">Možné směry další práce</div>
+                    <h2>Další práci bych zaměřil na packing a I/O.</h2>
+                    <div class="closing-grid two">
+                        <div>
+                            <strong>Podmíněný packing</strong>
+                            <p>nebalit halo, které je už souvislé v paměti</p>
+                        </div>
+                        <div>
+                            <strong>I/O batching</strong>
+                            <p>prověřit méně časté a větší kolektivní zápisy</p>
+                        </div>
+                    </div>
+                    <p class="final-line">
+                        Implementace škáluje, profilování odpovídá očekávání a hlavní přínos je
+                        v měřitelném rozkladu komunikační režie.
+                    </p>
+
+                    <aside class="notes">
+                        Splnit poslední bod zadání. Realistické návrhy, ne pouze obecné konstatování
+                        možnosti optimalizace.
+                    </aside>
+                </section>
+            </div>
+        </div>
+
+        <script>
+            window.MathJax = {
+                tex: {
+                    inlineMath: [["\\(", "\\)"]],
+                    displayMath: [["\\[", "\\]"]],
+                },
+                chtml: {
+                    matchFontHeight: false,
+                },
+            };
+        </script>
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+        <script>
+            Reveal.initialize({
+                hash: true,
+                slideNumber: "c/t",
+                transition: "fade",
+                backgroundTransition: "fade",
+                controlsTutorial: false,
+                width: 1280,
+                height: 720,
+                margin: 0.035,
+            });
+        </script>
+    </body>
+</html>

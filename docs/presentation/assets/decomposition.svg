@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 440" role="img" aria-label="1D vs 2D dekompozice">
+  <rect width="880" height="440" fill="#fbfaf7"/>
+  <g font-family="Inter, system-ui, sans-serif">
+    <g transform="translate(70 70)">
+      <text x="160" y="-22" text-anchor="middle" fill="#15191d" font-size="28" font-weight="800">1D pruhy</text>
+      <rect width="320" height="260" rx="8" fill="#fff" stroke="#15191d" stroke-width="3"/>
+      <g stroke="#d9dedf" stroke-width="2">
+        <path d="M80 0v260"/><path d="M160 0v260"/><path d="M240 0v260"/>
+      </g>
+      <g stroke="#b56b1d" stroke-width="9">
+        <path d="M80 0v260"/><path d="M160 0v260"/><path d="M240 0v260"/>
+      </g>
+      <text x="160" y="305" text-anchor="middle" fill="#65717d" font-size="21">dlouhé halo hrany</text>
+    </g>
+    <g transform="translate(490 70)">
+      <text x="160" y="-22" text-anchor="middle" fill="#15191d" font-size="28" font-weight="800">2D dlaždice</text>
+      <rect width="320" height="260" rx="8" fill="#fff" stroke="#15191d" stroke-width="3"/>
+      <g stroke="#d9dedf" stroke-width="2">
+        <path d="M80 0v260"/><path d="M160 0v260"/><path d="M240 0v260"/>
+        <path d="M0 65h320"/><path d="M0 130h320"/><path d="M0 195h320"/>
+      </g>
+      <g stroke="#0c7872" stroke-width="7">
+        <path d="M80 0v260"/><path d="M160 0v260"/><path d="M240 0v260"/>
+        <path d="M0 65h320"/><path d="M0 130h320"/><path d="M0 195h320"/>
+      </g>
+      <text x="160" y="305" text-anchor="middle" fill="#65717d" font-size="21">kratší halo hrany</text>
+    </g>
+  </g>
+</svg>

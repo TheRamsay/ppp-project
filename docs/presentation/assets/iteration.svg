@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1050 380" role="img" aria-label="Timeline iterace">
+  <rect width="1050" height="380" fill="#fbfaf7"/>
+  <g font-family="Inter, system-ui, sans-serif">
+    <line x1="85" y1="270" x2="965" y2="270" stroke="#15191d" stroke-width="3"/>
+    <g font-size="22" font-weight="800" fill="#15191d">
+      <rect x="95" y="120" width="185" height="82" rx="8" fill="#e6f2f0" stroke="#0c7872" stroke-width="2"/>
+      <text x="188" y="154" text-anchor="middle">compute</text>
+      <text x="188" y="183" text-anchor="middle">halo</text>
+
+      <rect x="315" y="82" width="220" height="76" rx="8" fill="#e9eef4" stroke="#536b84" stroke-width="2"/>
+      <text x="425" y="129" text-anchor="middle">start exchange</text>
+
+      <rect x="410" y="185" width="350" height="82" rx="8" fill="#e6f2f0" stroke="#0c7872" stroke-width="2"/>
+      <text x="585" y="219" text-anchor="middle">compute inner tile</text>
+      <text x="585" y="248" text-anchor="middle" fill="#65717d" font-size="18">nezávisí na nových halo datech</text>
+
+      <rect x="800" y="82" width="155" height="76" rx="8" fill="#e9eef4" stroke="#536b84" stroke-width="2"/>
+      <text x="878" y="129" text-anchor="middle">wait</text>
+    </g>
+    <g fill="#15191d">
+      <path d="M280 161h25v-8l24 18-24 18v-8h-25z"/>
+      <path d="M535 120h235v-8l24 18-24 18v-8H535z"/>
+      <path d="M760 226h29v-8l24 18-24 18v-8h-29z"/>
+    </g>
+    <rect x="315" y="306" width="640" height="18" rx="9" fill="#dce8f3"/>
+    <rect x="410" y="306" width="350" height="18" rx="9" fill="#0c7872"/>
+    <text x="635" y="350" text-anchor="middle" fill="#65717d" font-size="22">zelená část výpočtu překrývá modrou komunikaci</text>
+  </g>
+</svg>
