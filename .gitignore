@@ -34,10 +34,18 @@ __pycache__/
 *.pyo
 *.pyd
 .ruff_cache/
+.cache/
+.uv-cache/
+
+# LaTeX build artefacts
+*.aux
+*.fdb_latexmk
+*.fls
+*.log
+*.out
 
 # IDE/editor
 .vscode/
 .idea/
 *.code-workspace
 .DS_Store
-

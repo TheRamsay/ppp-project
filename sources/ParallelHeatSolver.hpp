@@ -258,19 +258,15 @@ class ParallelHeatSolver : public HeatSolverBase {
 
     size_t processTileX, processTileY;
 
-    /// @brief Grid of local material types (iron, air, etc.) size is gonna be (tileX +
-    /// haloZoneSize, tileY + haloZoneSize)
+    /// @brief Grid of local material types, including halo zones.
     std::vector<int, AlignedAllocator<int>> materialTypesLocal;
 
-    /// @brief Grid of local material propertier (conductivity coefficient?), size is gonna be
-    /// (tileX + haloZoneSize, tileY + haloZoneSize)
+    /// @brief Grid of local material properties, including halo zones.
     std::vector<float, AlignedAllocator<float>> materialPropertiesLocal;
 
-    /// @brief History of local temperatures, for this use case its gonna be dimensions (2,
-    /// tileX + haloZoneSize, tileY + haloZoneSize)
+    /// @brief Double-buffered local temperature grids, including halo zones.
     std::array<std::vector<float, AlignedAllocator<float>>, 2> temperatureBufferLocal;
 
-    std::array<MPI_Win, 2> windows{MPI_WIN_NULL, MPI_WIN_NULL};
     std::array<int, 2> mCoords{0, 0};
     int mCartRank{};
 

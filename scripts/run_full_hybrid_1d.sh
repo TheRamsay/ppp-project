@@ -63,16 +63,17 @@ for procs in ${PROCESSES[*]}; do
         INPUT=input_data_$size.h5
         OUTPUT=$OUT_FILE_PATH/${size}x${size}_out_hybrid_1d.h5
         
-        srun -N $nnodes -n $procs $BINARY_PATH $B    -n $n_iters -m $modeP2P -w $DISK_WRITE_INTENSITY -i $INPUT -t $OMP_NUM_THREADS            >> $STDOUT_FILE 2>> $STDERR_FILE
-        srun -N $nnodes -n $procs $BINARY_PATH -b    -n $n_iters -m $modeP2P -w $DISK_WRITE_INTENSITY -i $INPUT -t $OMP_NUM_THREADS -o $OUTPUT >> $STDOUT_FILE 2>> $STDERR_FILE
-        srun -N $nnodes -n $procs $BINARY_PATH -b -p -n $n_iters -m $modeP2P -w $DISK_WRITE_INTENSITY -i $INPUT -t $OMP_NUM_THREADS -o $OUTPUT >> $STDOUT_FILE 2>> $STDERR_FILE
+        stdbuf -oL srun -N $nnodes -n $procs $BINARY_PATH $B    -n $n_iters -m $modeP2P -w $DISK_WRITE_INTENSITY -i $INPUT -t $OMP_NUM_THREADS            >> $STDOUT_FILE 2>> $STDERR_FILE
+        stdbuf -oL srun -N $nnodes -n $procs $BINARY_PATH -b    -n $n_iters -m $modeP2P -w $DISK_WRITE_INTENSITY -i $INPUT -t $OMP_NUM_THREADS -o $OUTPUT >> $STDOUT_FILE 2>> $STDERR_FILE
+        stdbuf -oL srun -N $nnodes -n $procs $BINARY_PATH -b -p -n $n_iters -m $modeP2P -w $DISK_WRITE_INTENSITY -i $INPUT -t $OMP_NUM_THREADS -o $OUTPUT >> $STDOUT_FILE 2>> $STDERR_FILE
 
-        srun -N $nnodes -n $procs $BINARY_PATH -b    -n $n_iters -m $modeRMA -w $DISK_WRITE_INTENSITY -i $INPUT -t $OMP_NUM_THREADS            >> $STDOUT_FILE 2>> $STDERR_FILE
-        srun -N $nnodes -n $procs $BINARY_PATH -b    -n $n_iters -m $modeRMA -w $DISK_WRITE_INTENSITY -i $INPUT -t $OMP_NUM_THREADS -o $OUTPUT >> $STDOUT_FILE 2>> $STDERR_FILE
-        srun -N $nnodes -n $procs $BINARY_PATH -b -p -n $n_iters -m $modeRMA -w $DISK_WRITE_INTENSITY -i $INPUT -t $OMP_NUM_THREADS -o $OUTPUT >> $STDOUT_FILE 2>> $STDERR_FILE
+        stdbuf -oL srun -N $nnodes -n $procs $BINARY_PATH -b    -n $n_iters -m $modeRMA -w $DISK_WRITE_INTENSITY -i $INPUT -t $OMP_NUM_THREADS            >> $STDOUT_FILE 2>> $STDERR_FILE
+        stdbuf -oL srun -N $nnodes -n $procs $BINARY_PATH -b    -n $n_iters -m $modeRMA -w $DISK_WRITE_INTENSITY -i $INPUT -t $OMP_NUM_THREADS -o $OUTPUT >> $STDOUT_FILE 2>> $STDERR_FILE
+        stdbuf -oL srun -N $nnodes -n $procs $BINARY_PATH -b -p -n $n_iters -m $modeRMA -w $DISK_WRITE_INTENSITY -i $INPUT -t $OMP_NUM_THREADS -o $OUTPUT >> $STDOUT_FILE 2>> $STDERR_FILE
         
         rm -f $OUTPUT
     done
 done
 
+sync
 rm -rf $OUT_FILE_PATH
