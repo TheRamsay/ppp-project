@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#SBATCH --account=ATR-25-7
+#SBATCH --account=YOUR_PROJECT_ACCOUNT
 #SBATCH --job-name=PPP_PROJ01_HYBRID_1D
 #SBATCH -p qcpu
 #SBATCH -t 05:00:00
@@ -12,7 +12,7 @@ source load_modules.sh
 
 declare -a SIZES=(256 512 1024 2048 4096)
 declare -a PROCESSES=(1 2 4 8 16)
-declare PROJ_ID="atr-25-7"
+declare PROJ_ID="${PPP_PROJECT_ID:-YOUR_PROJECT_ID}"
 
 STDOUT_FILE="run_full_hybrid_1d_out.csv"
 STDERR_FILE="run_full_hybrid_1d_err.txt"
@@ -63,16 +63,17 @@ for procs in ${PROCESSES[*]}; do
         INPUT=input_data_$size.h5
         OUTPUT=$OUT_FILE_PATH/${size}x${size}_out_hybrid_1d.h5
         
-        srun -N $nnodes -n $procs $BINARY_PATH $B    -n $n_iters -m $modeP2P -w $DISK_WRITE_INTENSITY -i $INPUT -t $OMP_NUM_THREADS            >> $STDOUT_FILE 2>> $STDERR_FILE
-        srun -N $nnodes -n $procs $BINARY_PATH -b    -n $n_iters -m $modeP2P -w $DISK_WRITE_INTENSITY -i $INPUT -t $OMP_NUM_THREADS -o $OUTPUT >> $STDOUT_FILE 2>> $STDERR_FILE
-        srun -N $nnodes -n $procs $BINARY_PATH -b -p -n $n_iters -m $modeP2P -w $DISK_WRITE_INTENSITY -i $INPUT -t $OMP_NUM_THREADS -o $OUTPUT >> $STDOUT_FILE 2>> $STDERR_FILE
+        stdbuf -oL srun -N $nnodes -n $procs $BINARY_PATH $B    -n $n_iters -m $modeP2P -w $DISK_WRITE_INTENSITY -i $INPUT -t $OMP_NUM_THREADS            >> $STDOUT_FILE 2>> $STDERR_FILE
+        stdbuf -oL srun -N $nnodes -n $procs $BINARY_PATH -b    -n $n_iters -m $modeP2P -w $DISK_WRITE_INTENSITY -i $INPUT -t $OMP_NUM_THREADS -o $OUTPUT >> $STDOUT_FILE 2>> $STDERR_FILE
+        stdbuf -oL srun -N $nnodes -n $procs $BINARY_PATH -b -p -n $n_iters -m $modeP2P -w $DISK_WRITE_INTENSITY -i $INPUT -t $OMP_NUM_THREADS -o $OUTPUT >> $STDOUT_FILE 2>> $STDERR_FILE
 
-        srun -N $nnodes -n $procs $BINARY_PATH -b    -n $n_iters -m $modeRMA -w $DISK_WRITE_INTENSITY -i $INPUT -t $OMP_NUM_THREADS            >> $STDOUT_FILE 2>> $STDERR_FILE
-        srun -N $nnodes -n $procs $BINARY_PATH -b    -n $n_iters -m $modeRMA -w $DISK_WRITE_INTENSITY -i $INPUT -t $OMP_NUM_THREADS -o $OUTPUT >> $STDOUT_FILE 2>> $STDERR_FILE
-        srun -N $nnodes -n $procs $BINARY_PATH -b -p -n $n_iters -m $modeRMA -w $DISK_WRITE_INTENSITY -i $INPUT -t $OMP_NUM_THREADS -o $OUTPUT >> $STDOUT_FILE 2>> $STDERR_FILE
+        stdbuf -oL srun -N $nnodes -n $procs $BINARY_PATH -b    -n $n_iters -m $modeRMA -w $DISK_WRITE_INTENSITY -i $INPUT -t $OMP_NUM_THREADS            >> $STDOUT_FILE 2>> $STDERR_FILE
+        stdbuf -oL srun -N $nnodes -n $procs $BINARY_PATH -b    -n $n_iters -m $modeRMA -w $DISK_WRITE_INTENSITY -i $INPUT -t $OMP_NUM_THREADS -o $OUTPUT >> $STDOUT_FILE 2>> $STDERR_FILE
+        stdbuf -oL srun -N $nnodes -n $procs $BINARY_PATH -b -p -n $n_iters -m $modeRMA -w $DISK_WRITE_INTENSITY -i $INPUT -t $OMP_NUM_THREADS -o $OUTPUT >> $STDOUT_FILE 2>> $STDERR_FILE
         
         rm -f $OUTPUT
     done
 done
 
+sync
 rm -rf $OUT_FILE_PATH

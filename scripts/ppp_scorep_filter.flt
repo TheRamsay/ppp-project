@@ -1,5 +1,6 @@
 SCOREP_REGION_NAMES_BEGIN
   EXCLUDE
     HeatSolverBase::computePoint
+    HeatSolverBase::updateTile
     *std::*
 SCOREP_REGION_NAMES_END

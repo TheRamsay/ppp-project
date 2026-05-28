@@ -15,7 +15,7 @@ cmake_minimum_required(VERSION 3.22)
 project(ppp_proj01 LANGUAGES C CXX)
 
 if(NOT DEFINED LOGIN)
-  set(LOGIN "xhumld00")
+  set(LOGIN "xlogin00" CACHE STRING "Login used for assignment packaging")
 endif()
 
 # Set default build type to Release

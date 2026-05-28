@@ -76,7 +76,7 @@ for comm_type in ['p2p', 'rma']:
 
     ax.set_xlabel('Number of cores')
     ax.set_xticks(x_axis_points[0:len(scaling_values)])
-    ax.set_ylabel('Iteration time [ms]')
+    ax.set_ylabel('Iteration time [s]')
     ax.set_yscale('log', base=2)
     ax.set_xscale('log', base=2)
     ax.legend(loc='upper center', bbox_to_anchor=(legend_box_left, legend_box_top), ncol=5, fancybox=True, prop={'size': legend_font_size})
@@ -193,7 +193,7 @@ for comm_type in ['p2p', 'rma']:
 
     ax.set_xlabel('Number of cores')
     ax.set_xticks(x_axis_points[0:len(scaling_values)])
-    ax.set_ylabel('Iteration time [ms]')
+    ax.set_ylabel('Iteration time [s]')
     ax.set_yscale('log', base=2)
     ax.set_xscale('log', base=2)
     ax.legend(loc='upper center', bbox_to_anchor=(legend_box_left, legend_box_top), ncol=5, fancybox=True, prop={'size': legend_font_size})
@@ -306,7 +306,7 @@ for comm_type in ['p2p', 'rma']:
 
     ax.set_xlabel('Number of cores')
     ax.set_xticks(x_axis_points[0:len(scaling_values)])
-    ax.set_ylabel('Iteration time [ms]')
+    ax.set_ylabel('Iteration time [s]')
     ax.set_yscale('log', base=2)
     ax.set_xscale('log', base=2)
     ax.legend(loc='upper center', bbox_to_anchor=(legend_box_left, legend_box_top), ncol=5, fancybox=True, prop={'size': legend_font_size})

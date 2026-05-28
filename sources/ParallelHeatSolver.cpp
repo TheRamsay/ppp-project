@@ -221,12 +221,6 @@ void ParallelHeatSolver::initHaloExchange() {
     MPI_Type_commit(&haloZoneHorizontal);
 
     if (mSimulationProps.isRunParallelRMA()) {
-        const MPI_Aint windowSize = static_cast<MPI_Aint>(localTileY * localTileX * sizeof(float));
-        MPI_Win_create(temperatureBufferLocal[0].data(), windowSize, sizeof(float), MPI_INFO_NULL,
-                       cartComm, &windows[0]);
-        MPI_Win_create(temperatureBufferLocal[1].data(), windowSize, sizeof(float), MPI_INFO_NULL,
-                       cartComm, &windows[1]);
-
         // Contiguous RMA buffers: [left|right|top|bottom]
         rmaVertSize = transferTileY * haloZoneSize;
         rmaHorizSize = transferTileX * haloZoneSize;
@@ -234,8 +228,7 @@ void ParallelHeatSolver::initHaloExchange() {
         rmaSendBuf.resize(totalBufSize, 0.0f);
         rmaRecvBuf.resize(totalBufSize, 0.0f);
 
-        MPI_Win_create(rmaRecvBuf.data(),
-                       static_cast<MPI_Aint>(totalBufSize * sizeof(float)),
+        MPI_Win_create(rmaRecvBuf.data(), static_cast<MPI_Aint>(totalBufSize * sizeof(float)),
                        sizeof(float), MPI_INFO_NULL, cartComm, &rmaHaloWindow);
 
         // Neighbor group for PSCW synchronization (post/start/complete/wait)
@@ -244,10 +237,14 @@ void ParallelHeatSolver::initHaloExchange() {
         MPI_Cart_shift(cartComm, 1, 1, &upRank, &downRank);
         int neighbors[4];
         int nNeighbors = 0;
-        if (leftRank != MPI_PROC_NULL)  neighbors[nNeighbors++] = leftRank;
-        if (rightRank != MPI_PROC_NULL) neighbors[nNeighbors++] = rightRank;
-        if (upRank != MPI_PROC_NULL)    neighbors[nNeighbors++] = upRank;
-        if (downRank != MPI_PROC_NULL)  neighbors[nNeighbors++] = downRank;
+        if (leftRank != MPI_PROC_NULL)
+            neighbors[nNeighbors++] = leftRank;
+        if (rightRank != MPI_PROC_NULL)
+            neighbors[nNeighbors++] = rightRank;
+        if (upRank != MPI_PROC_NULL)
+            neighbors[nNeighbors++] = upRank;
+        if (downRank != MPI_PROC_NULL)
+            neighbors[nNeighbors++] = downRank;
         MPI_Group worldGroup;
         MPI_Comm_group(cartComm, &worldGroup);
         MPI_Group_incl(worldGroup, nNeighbors, neighbors, &mNeighborGroup);
@@ -266,14 +263,6 @@ void ParallelHeatSolver::deinitHaloExchange() {
     if (rmaHaloWindow != MPI_WIN_NULL) {
         MPI_Win_free(&rmaHaloWindow);
         rmaHaloWindow = MPI_WIN_NULL;
-    }
-    if (windows[0] != MPI_WIN_NULL) {
-        MPI_Win_free(&windows[0]);
-        windows[0] = MPI_WIN_NULL;
-    }
-    if (windows[1] != MPI_WIN_NULL) {
-        MPI_Win_free(&windows[1]);
-        windows[1] = MPI_WIN_NULL;
     }
     if (haloZoneHorizontal != MPI_DATATYPE_NULL) {
         MPI_Type_free(&haloZoneHorizontal);
@@ -304,7 +293,7 @@ template <typename T> void ParallelHeatSolver::scatterTiles(const T *globalData,
     const MPI_Datatype localTileType =
         std::is_same_v<T, int> ? localTransferTileInt : localTransferTileFloat;
 
-    // TODO: root 0?
+    // Only the master rank owns the global input array and prepares scatter metadata.
     std::vector<int> sendCounts(mWorldSize);
     std::vector<int> displs(mWorldSize);
     // coords = (tileY, tileX)
@@ -314,12 +303,6 @@ template <typename T> void ParallelHeatSolver::scatterTiles(const T *globalData,
         for (int i = 0; i < mWorldSize; i++) {
             sendCounts[i] = 1;
             MPI_Cart_coords(cartComm, i, 2, coords);
-            // funny math here, basically take number of rows from that SMALL TILE, multiply it by
-            // its position in the global grid (process based), and then also multiply it by stride
-            // of the global grid (transferTileX)
-            // that will moves us to correct row in the global grid, and then we just adjust
-            // the column
-            // (pláčem 😭)
             displs[i] = (coords[1] * transferTileY) * globalTileX + coords[0] * transferTileX;
         }
     }
@@ -459,11 +442,12 @@ void ParallelHeatSolver::startHaloExchangeP2P(float *localData,
     }
 }
 
-void ParallelHeatSolver::startHaloExchangeRMA(float *localData, MPI_Win window) {
+void ParallelHeatSolver::startHaloExchangeRMA(float *localData, [[maybe_unused]] MPI_Win window) {
     /**********************************************************************************************************************/
     /*                       Start the non-blocking halo zones exchange using RMA communication.
      */
-    /*                   Optimized: pack edges into contiguous buffers, Put contiguous data.       */
+    /*                   Do not forget that you put/get the values to/from the target's opposite side */
+    /*                   Optimized: pack edges into contiguous buffers, Put contiguous data. */
     /**********************************************************************************************************************/
     rmaLocalDataPtr = localData;
 
@@ -483,14 +467,14 @@ void ParallelHeatSolver::startHaloExchangeRMA(float *localData, MPI_Win window) 
     int position = 0;
 
     // Pack all 4 edges using MPI_Pack with existing derived datatypes
-    MPI_Pack(localData + leftInterior, 1, haloZoneVertical,
-             rmaSendBuf.data(), bufSizeBytes, &position, cartComm);
-    MPI_Pack(localData + rightInterior, 1, haloZoneVertical,
-             rmaSendBuf.data(), bufSizeBytes, &position, cartComm);
-    MPI_Pack(localData + topInterior, 1, haloZoneHorizontal,
-             rmaSendBuf.data(), bufSizeBytes, &position, cartComm);
-    MPI_Pack(localData + bottomInterior, 1, haloZoneHorizontal,
-             rmaSendBuf.data(), bufSizeBytes, &position, cartComm);
+    MPI_Pack(localData + leftInterior, 1, haloZoneVertical, rmaSendBuf.data(), bufSizeBytes,
+             &position, cartComm);
+    MPI_Pack(localData + rightInterior, 1, haloZoneVertical, rmaSendBuf.data(), bufSizeBytes,
+             &position, cartComm);
+    MPI_Pack(localData + topInterior, 1, haloZoneHorizontal, rmaSendBuf.data(), bufSizeBytes,
+             &position, cartComm);
+    MPI_Pack(localData + bottomInterior, 1, haloZoneHorizontal, rmaSendBuf.data(), bufSizeBytes,
+             &position, cartComm);
 
     MPI_Win_post(mNeighborGroup, 0, rmaHaloWindow);
     MPI_Win_start(mNeighborGroup, 0, rmaHaloWindow);
@@ -498,15 +482,14 @@ void ParallelHeatSolver::startHaloExchangeRMA(float *localData, MPI_Win window) 
     // Put contiguous data to neighbors' contiguous recv buffers
     if (leftRank != MPI_PROC_NULL) {
         // My left edge → left neighbor's "fromRight" recv area (offset rmaVertSize)
-        MPI_Put(rmaSendBuf.data(), static_cast<int>(rmaVertSize), MPI_FLOAT,
-                leftRank, static_cast<MPI_Aint>(rmaVertSize),
-                static_cast<int>(rmaVertSize), MPI_FLOAT, rmaHaloWindow);
+        MPI_Put(rmaSendBuf.data(), static_cast<int>(rmaVertSize), MPI_FLOAT, leftRank,
+                static_cast<MPI_Aint>(rmaVertSize), static_cast<int>(rmaVertSize), MPI_FLOAT,
+                rmaHaloWindow);
     }
     if (rightRank != MPI_PROC_NULL) {
         // My right edge → right neighbor's "fromLeft" recv area (offset 0)
         MPI_Put(rmaSendBuf.data() + rmaVertSize, static_cast<int>(rmaVertSize), MPI_FLOAT,
-                rightRank, 0,
-                static_cast<int>(rmaVertSize), MPI_FLOAT, rmaHaloWindow);
+                rightRank, 0, static_cast<int>(rmaVertSize), MPI_FLOAT, rmaHaloWindow);
     }
     if (upRank != MPI_PROC_NULL) {
         // My top edge → up neighbor's "fromDown" recv area (offset 2*rmaVertSize+rmaHorizSize)
@@ -516,9 +499,8 @@ void ParallelHeatSolver::startHaloExchangeRMA(float *localData, MPI_Win window) 
     }
     if (downRank != MPI_PROC_NULL) {
         // My bottom edge → down neighbor's "fromUp" recv area (offset 2*rmaVertSize)
-        MPI_Put(rmaSendBuf.data() + 2 * rmaVertSize + rmaHorizSize,
-                static_cast<int>(rmaHorizSize), MPI_FLOAT,
-                downRank, static_cast<MPI_Aint>(2 * rmaVertSize),
+        MPI_Put(rmaSendBuf.data() + 2 * rmaVertSize + rmaHorizSize, static_cast<int>(rmaHorizSize),
+                MPI_FLOAT, downRank, static_cast<MPI_Aint>(2 * rmaVertSize),
                 static_cast<int>(rmaHorizSize), MPI_FLOAT, rmaHaloWindow);
     }
 }
@@ -534,7 +516,7 @@ void ParallelHeatSolver::awaitHaloExchangeP2P(std::array<MPI_Request, 8> &reques
     MPI_Waitall(8, requests.data(), statuses);
 }
 
-void ParallelHeatSolver::awaitHaloExchangeRMA(MPI_Win window) {
+void ParallelHeatSolver::awaitHaloExchangeRMA([[maybe_unused]] MPI_Win window) {
     /**********************************************************************************************************************/
     /*                       Wait for all halo zone exchanges to finalize using RMA
      * communication.
@@ -552,14 +534,14 @@ void ParallelHeatSolver::awaitHaloExchangeRMA(MPI_Win window) {
     const int recvBufSizeBytes = static_cast<int>(rmaRecvBuf.size() * sizeof(float));
     int position = 0;
 
-    MPI_Unpack(rmaRecvBuf.data(), recvBufSizeBytes, &position,
-               localData + leftHalo, 1, haloZoneVertical, cartComm);
-    MPI_Unpack(rmaRecvBuf.data(), recvBufSizeBytes, &position,
-               localData + rightHalo, 1, haloZoneVertical, cartComm);
-    MPI_Unpack(rmaRecvBuf.data(), recvBufSizeBytes, &position,
-               localData + topHalo, 1, haloZoneHorizontal, cartComm);
-    MPI_Unpack(rmaRecvBuf.data(), recvBufSizeBytes, &position,
-               localData + bottomHalo, 1, haloZoneHorizontal, cartComm);
+    MPI_Unpack(rmaRecvBuf.data(), recvBufSizeBytes, &position, localData + leftHalo, 1,
+               haloZoneVertical, cartComm);
+    MPI_Unpack(rmaRecvBuf.data(), recvBufSizeBytes, &position, localData + rightHalo, 1,
+               haloZoneVertical, cartComm);
+    MPI_Unpack(rmaRecvBuf.data(), recvBufSizeBytes, &position, localData + topHalo, 1,
+               haloZoneHorizontal, cartComm);
+    MPI_Unpack(rmaRecvBuf.data(), recvBufSizeBytes, &position, localData + bottomHalo, 1,
+               haloZoneHorizontal, cartComm);
 }
 
 void ParallelHeatSolver::run(std::vector<float, AlignedAllocator<float>> &outResult) {
@@ -631,11 +613,11 @@ void ParallelHeatSolver::run(std::vector<float, AlignedAllocator<float>> &outRes
         if (mSimulationProps.isRunParallelP2P()) {
             startHaloExchangeP2P(temperatureBufferLocal[newIdx].data(), requestsP2P);
         } else if (mSimulationProps.isRunParallelRMA()) {
-            startHaloExchangeRMA(temperatureBufferLocal[newIdx].data(), windows[newIdx]);
+            startHaloExchangeRMA(temperatureBufferLocal[newIdx].data(), MPI_WIN_NULL);
         }
 
         /**********************************************************************************************************************/
-        /*                           Compute the rest of the tile. Use updateTile method.                                     */
+        /*                           Compute the rest of the tile. Use updateTile method. */
         /**********************************************************************************************************************/
         if (innerSizeX > 0 && innerSizeY > 0) {
             updateTile(temperatureBufferLocal[oldIdx].data(), temperatureBufferLocal[newIdx].data(),
@@ -649,7 +631,7 @@ void ParallelHeatSolver::run(std::vector<float, AlignedAllocator<float>> &outRes
         if (mSimulationProps.isRunParallelP2P()) {
             awaitHaloExchangeP2P(requestsP2P);
         } else if (mSimulationProps.isRunParallelRMA()) {
-            awaitHaloExchangeRMA(windows[newIdx]);
+            awaitHaloExchangeRMA(MPI_WIN_NULL);
         }
 
         if (shouldStoreData(iter) && !mSimulationProps.getOutputFileName().empty()) {
@@ -689,7 +671,7 @@ void ParallelHeatSolver::run(std::vector<float, AlignedAllocator<float>> &outRes
     double elapsedTime = MPI_Wtime() - startTime;
 
     /**********************************************************************************************************************/
-    /*                                     Gather final domain temperature.                                               */
+    /*                                     Gather final domain temperature. */
     /**********************************************************************************************************************/
 
     gatherTiles<float>(temperatureBufferLocal[resIdx].data(), outResult.data());
@@ -769,7 +751,7 @@ void ParallelHeatSolver::storeDataIntoFileSequential(hid_t fileHandle, std::size
 
 void ParallelHeatSolver::openOutputFileParallel() {
 #ifdef H5_HAVE_PARALLEL
-    Hdf5PropertyListHandle faplHandle(H5Pcreate(H5P_FILE_ACCESS));
+    Hdf5PropertyListHandle faplHandle{};
 
     /**********************************************************************************************************************/
     /*                          Open output HDF5 file for parallel access with alignment. */
@@ -777,6 +759,7 @@ void ParallelHeatSolver::openOutputFileParallel() {
      * the resource.            */
     /**********************************************************************************************************************/
 
+    faplHandle.reset(H5Pcreate(H5P_FILE_ACCESS));
     H5Pset_fapl_mpio(faplHandle, MPI_COMM_WORLD, MPI_INFO_NULL);
     H5Pset_alignment(faplHandle, 0, 1 << 20);
 
@@ -823,7 +806,7 @@ void ParallelHeatSolver::storeDataIntoFileParallel(hid_t fileHandle,
         // Create new dataspace and dataset using it.
         static constexpr std::string_view dataSetName{"Temperature"};
 
-        Hdf5PropertyListHandle datasetPropListHandle(H5Pcreate(H5P_DATASET_CREATE));
+        Hdf5PropertyListHandle datasetPropListHandle{};
 
         /**********************************************************************************************************************/
         /*                            Create dataset property list to set up chunking. */
@@ -831,6 +814,7 @@ void ParallelHeatSolver::storeDataIntoFileParallel(hid_t fileHandle,
          * datasetPropListHandle variable.                   */
         /**********************************************************************************************************************/
 
+        datasetPropListHandle.reset(H5Pcreate(H5P_DATASET_CREATE));
         H5Pset_chunk(datasetPropListHandle, 2, gridSize.data());
 
         Hdf5DataspaceHandle dataSpaceHandle(H5Screate_simple(2, gridSize.data(), nullptr));
@@ -842,12 +826,14 @@ void ParallelHeatSolver::storeDataIntoFileParallel(hid_t fileHandle,
                                                   static_cast<hsize_t>(localTileX)};
         const std::array<hsize_t, 2> memOffset{static_cast<hsize_t>(haloZoneSize),
                                                static_cast<hsize_t>(haloZoneSize)};
-        Hdf5DataspaceHandle memSpaceHandle(H5Screate_simple(2, memSpaceSize.data(), nullptr));
+        Hdf5DataspaceHandle memSpaceHandle{};
 
         /**********************************************************************************************************************/
         /*                Create memory dataspace representing tile in the memory (set up
          * memSpaceHandle).                    */
         /**********************************************************************************************************************/
+
+        memSpaceHandle.reset(H5Screate_simple(2, memSpaceSize.data(), nullptr));
 
         /**********************************************************************************************************************/
         /*              Select inner part of the tile in memory and matching part of the dataset
@@ -860,7 +846,7 @@ void ParallelHeatSolver::storeDataIntoFileParallel(hid_t fileHandle,
         H5Sselect_hyperslab(dataSpaceHandle, H5S_SELECT_SET, tileOffset.data(), nullptr,
                             tileSize.data(), nullptr);
 
-        Hdf5PropertyListHandle propListHandle(H5Pcreate(H5P_DATASET_XFER));
+        Hdf5PropertyListHandle propListHandle{};
 
         /**********************************************************************************************************************/
         /*              Perform collective write operation, writting tiles from all processes at
@@ -868,6 +854,7 @@ void ParallelHeatSolver::storeDataIntoFileParallel(hid_t fileHandle,
         /*                                   Set up the propListHandle variable. */
         /**********************************************************************************************************************/
 
+        propListHandle.reset(H5Pcreate(H5P_DATASET_XFER));
         H5Pset_dxpl_mpio(propListHandle, H5FD_MPIO_COLLECTIVE);
 
         H5Dwrite(dataSetHandle, H5T_NATIVE_FLOAT, memSpaceHandle, dataSpaceHandle, propListHandle,
